@@ -1,9 +1,13 @@
+import { recipes } from "./data";
+import type { RecipeCategory } from "./types";
 
-import { recipes } from "./data"
+export default function getRandomRecipe(category?: RecipeCategory) {
+  const filteredRecipes = category
+    ? recipes.filter((recipe) => recipe.category === category)
+    : recipes;
 
-export default function getRandomRecipe() {
-    const randomRecipeIndex = Math.floor(Math.random() * recipes.length);
-    return recipes[randomRecipeIndex];
+  const pool = filteredRecipes.length > 0 ? filteredRecipes : recipes;
+  const randomRecipeIndex = Math.floor(Math.random() * pool.length);
+
+  return pool[randomRecipeIndex];
 }
-
-

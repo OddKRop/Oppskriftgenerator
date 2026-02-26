@@ -1,5 +1,8 @@
+export type RecipeCategory = "middag" | "lunsj" | "frokost" | "snack";
+
 export type Recipe = {
-    title: string;
-    ingredients: string[];
-    steps: string[];
+  title: string;
+  category: RecipeCategory;
+  ingredients: string[];
+  steps: string[];
 };
