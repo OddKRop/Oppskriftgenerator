@@ -1,31 +1,50 @@
 'use client'
 
-import getRandomRecipe from "@/lib/recipes/getRandomRecipe";
-import type { Recipe, RecipeCategory } from "@/lib/recipes/types";
-import { useEffect, useRef, useState } from 'react';
-
-const recipeCategories: Array<{ value: "alle" | RecipeCategory; label: string }> = [
-  { value: "alle", label: "Alle" },
-  { value: "middag", label: "Middag" },
-  { value: "lunsj", label: "Lunsj" },
-  { value: "frokost", label: "Frokost" },
-  { value: "snack", label: "Snack" }
-];
+import EmptyState from "@/components/EmptyState";
+import ErrorState from "@/components/ErrorState";
+import LoadingState from "@/components/LoadingState";
+import { recipeCategories } from "@/lib/schema/recipes";
+import getRandomRecipe from "@/lib/utils/getRandomRecipe";
+import type { Recipe, RecipeCategory } from "@/types/recipe";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export default function Home() {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRecipeVisible, setIsRecipeVisible] = useState(false);
+  const [recipeError, setRecipeError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<"alle" | RecipeCategory>("alle");
+  const [isCheckingConfig, setIsCheckingConfig] = useState(true);
+  const [configError, setConfigError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const checkAiConfig = useCallback(async () => {
+    setIsCheckingConfig(true);
+    setConfigError(null);
+
+    try {
+      const response = await fetch("/api/ai/health");
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        setConfigError("AI config mangler. Legg OPENAI_API_KEY i .env.local.");
+      }
+    } catch {
+      setConfigError("Klarte ikke sjekke AI-oppsett. Proev igjen.");
+    } finally {
+      setIsCheckingConfig(false);
+    }
+  }, []);
+
   useEffect(() => {
+    checkAiConfig();
+
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-  }, []);
+  }, [checkAiConfig]);
 
   const handleCategoryChange = (value: "alle" | RecipeCategory) => {
     if (timerRef.current) {
@@ -38,32 +57,37 @@ export default function Home() {
   };
 
   const handleGetRecipe = () => {
+    if (configError || isCheckingConfig) {
+      return;
+    }
+
     setIsLoading(true);
     setIsRecipeVisible(false);
+    setRecipeError(null);
 
     const categoryFilter = selectedCategory === "alle" ? undefined : selectedCategory;
 
     timerRef.current = setTimeout(() => {
-      setRecipe((prevRecipe) => {
-        let nextRecipe = getRandomRecipe(categoryFilter);
-        let attempts = 0;
+      try {
+        setRecipe((prevRecipe) => {
+          let nextRecipe = getRandomRecipe(categoryFilter);
+          let attempts = 0;
 
-        // Unngå samme oppskrift to ganger på rad
-        while (prevRecipe && nextRecipe.title === prevRecipe.title && attempts < 10) {
-          nextRecipe = getRandomRecipe(categoryFilter);
-          attempts++;
-        }
-        return nextRecipe;
+          while (prevRecipe && nextRecipe.title === prevRecipe.title && attempts < 10) {
+            nextRecipe = getRandomRecipe(categoryFilter);
+            attempts++;
+          }
+          return nextRecipe;
+        });
+      } catch {
+        setRecipeError("Kunne ikke hente oppskrift akkurat naa.");
+      } finally {
+        setIsLoading(false);
+
+        requestAnimationFrame(() => {
+          setIsRecipeVisible(true);
+        });
       }
-    );
-
-
-      setIsLoading(false);
-
-      requestAnimationFrame(() => {
-        setIsRecipeVisible(true);
-      }
-    );
     }, 500);
   };
 
@@ -90,16 +114,30 @@ export default function Home() {
         </div>
         <button
           onClick={handleGetRecipe}
-          disabled={isLoading}
+          disabled={isLoading || isCheckingConfig || Boolean(configError)}
           className="rounded-lg bg-zinc-100 px-5 py-3 font-medium text-zinc-900 transition hover:bg-zinc-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isLoading ? "Henter oppskrift..." : "Gi meg en oppskrift"}
+          {isCheckingConfig ? "Sjekker oppsett..." : "Gi meg en oppskrift"}
         </button>
         <section className="w-full rounded-xl border border-zinc-700 bg-zinc-800 p-6 text-zinc-100">
-          {isLoading ? (
-            <p className="animate-pulse text-zinc-400">Henter oppskrift...</p>
+          {configError ? (
+            <ErrorState
+              title="AI-oppsett mangler"
+              message={configError}
+              onRetry={checkAiConfig}
+              retryLabel="Sjekk paa nytt"
+            />
+          ) : isLoading ? (
+            <LoadingState text="Generating..." />
+          ) : recipeError ? (
+            <ErrorState message={recipeError} onRetry={handleGetRecipe} />
           ) : !recipe ? (
-            <p className="text-zinc-400">Her kommer oppskriften</p>
+            <EmptyState
+              title="Ingen oppskrift enda"
+              description="Velg kategori og trykk paa knappen for aa generere en oppskrift."
+              ctaLabel="Generer na"
+              onAction={handleGetRecipe}
+            />
           ) : (
             <div className={`transition-opacity duration-500 ${isRecipeVisible ? "opacity-100" : "opacity-0"}`}>
               <h2 className="mb-4 text-2xl font-semibold">{recipe.title}</h2>
