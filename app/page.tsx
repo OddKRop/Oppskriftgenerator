@@ -30,7 +30,7 @@ export default function Home() {
         setConfigError("AI config mangler. Legg OPENAI_API_KEY i .env.local.");
       }
     } catch {
-      setConfigError("Klarte ikke sjekke AI-oppsett. Proev igjen.");
+      setConfigError("Klarte ikke sjekke AI-oppsett. Prøv igjen.");
     } finally {
       setIsCheckingConfig(false);
     }
