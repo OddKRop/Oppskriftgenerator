@@ -80,7 +80,7 @@ export default function Home() {
           return nextRecipe;
         });
       } catch {
-        setRecipeError("Kunne ikke hente oppskrift akkurat naa.");
+        setRecipeError("Kunne ikke hente oppskrift akkurat nå.");
       } finally {
         setIsLoading(false);
 
