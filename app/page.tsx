@@ -1,7 +1,6 @@
 'use client'
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import EmptyState from "@/components/EmptyState";
 import ErrorState from "@/components/ErrorState";
 import LoadingState from "@/components/LoadingState";
@@ -15,7 +14,6 @@ import type { GeneratedRecipe } from "@/lib/schema/generatedRecipe";
 import { useEffect, useMemo, useState } from "react";
 
 export default function Home() {
-  const searchParams = useSearchParams();
   const [recipe, setRecipe] = useState<GeneratedRecipe | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [recipeError, setRecipeError] = useState<string | null>(null);
@@ -26,7 +24,6 @@ export default function Home() {
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [assumptions, setAssumptions] = useState<string[]>([]);
 
-  const favoriteRecipeId = searchParams.get("favorite");
   const hasRecipe = Boolean(recipe);
 
   const parsedIngredients = useMemo(
@@ -148,6 +145,8 @@ export default function Home() {
   }, [recipe]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const favoriteRecipeId = params.get("favorite");
     if (!favoriteRecipeId) {
       return;
     }
@@ -162,7 +161,7 @@ export default function Home() {
     setRecipeError(null);
     setClarifyingQuestion(null);
     setAssumptions([]);
-  }, [favoriteRecipeId]);
+  }, []);
 
   return (
     <div className={`min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100 ${hasRecipe ? "pb-32" : ""}`}>
