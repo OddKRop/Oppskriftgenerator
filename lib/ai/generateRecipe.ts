@@ -1,16 +1,21 @@
 import "server-only";
 import { getOpenAIApiKey } from "@/lib/ai/openaiConfig";
 import {
-  GeneratedRecipeSchema,
+  GeneratedRecipeResultSchema,
   type GenerateRecipeInput,
   type GeneratedRecipe,
+  type GeneratedRecipeResult,
 } from "@/lib/schema/generatedRecipe";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
 type GenerateRecipeResult =
-  | { ok: true; recipe: GeneratedRecipe; attempts: number }
+  | {
+      ok: true;
+      result: { recipe: GeneratedRecipe; assumptions?: string[] } | { clarifyingQuestion: string };
+      attempts: number;
+    }
   | {
       ok: false;
       code: "missing_api_key" | "provider_error" | "invalid_model_output";
@@ -22,35 +27,56 @@ function buildPrompt(input: GenerateRecipeInput): string {
   const ingredientsText = input.ingredients.map((item) => `- ${item}`).join("\n");
   const preferencesText = input.preferences?.trim() ? input.preferences.trim() : "None";
 
-  const schemaExample = JSON.stringify(
+  const recipeExample = JSON.stringify(
     {
-      id: "pasta-carbonara",
-      title: "Pasta Carbonara",
-      servings: 2,
-      timeMinutes: 25,
-      ingredients: [{ item: "pasta", quantity: "200g" }, { item: "eggs" }],
-      steps: ["Boil pasta.", "Mix eggs and cheese.", "Combine and serve."],
-      missingIngredients: [{ item: "guanciale", reason: "for sauce" }],
-      notes: ["Best served immediately"],
+      recipe: {
+        id: "pasta-carbonara",
+        title: "Pasta Carbonara",
+        servings: 2,
+        timeMinutes: 25,
+        ingredients: [{ item: "pasta", quantity: "200g" }, { item: "eggs" }],
+        steps: ["Boil pasta.", "Mix eggs and cheese.", "Combine and serve."],
+        missingIngredients: [{ item: "guanciale", reason: "for sauce" }],
+        notes: ["Best served immediately"],
+      },
+      assumptions: ["Assumed pantry staples include salt and pepper."],
+    },
+    null,
+    2
+  );
+
+  const clarifyingExample = JSON.stringify(
+    {
+      clarifyingQuestion: "Do you have eggs available?",
     },
     null,
     2
   );
 
   return [
-    "Generate exactly one recipe as strict JSON. No markdown. No prose. No code fences.",
+    "Generate a weeknight-friendly recipe as strict JSON. No markdown. No prose. No code fences.",
     "Rules:",
     "- Prioritize using the user's ingredients.",
     "- List at most 5 missing ingredients.",
     "- Only include truly missing ingredients in missingIngredients (items the user did NOT list).",
     "- For each missingIngredients entry, use a short reason phrase like 'for sauce', 'for garnish', or 'for serving' when applicable.",
     `- Keep under 40 minutes unless allowLongerTime is ${input.allowLongerTime ? "true (longer is fine)" : "false"}.`,
-    "- For optional fields (servings, timeMinutes, quantity, reason, notes): omit the key entirely if not applicable. Do NOT use null.",
+    "- Make the recipe weeknight-friendly: simple process, common ingredients, low complexity.",
+    "- timeMinutes is required and must be a realistic total time estimate.",
+    "- For optional fields (servings, quantity, reason, notes): omit the key entirely if not applicable. Do NOT use null.",
     "- missingIngredients must always be present as an array (use [] if none are missing).",
     "- The id must be a short kebab-case slug, e.g. 'chicken-stir-fry'.",
+    "- Output shape must be exactly one of these:",
+    "  1) { \"recipe\": { ... }, \"assumptions\"?: [ ... ] }",
+    "  2) { \"clarifyingQuestion\": \"...\" }",
+    "- If unsure, ask exactly one clarifyingQuestion and do NOT include recipe or assumptions.",
+    "- If you can make a reasonable assumption, return recipe and optionally assumptions. Do NOT include clarifyingQuestion in that case.",
     "",
-    "Example output:",
-    schemaExample,
+    "Example recipe output:",
+    recipeExample,
+    "",
+    "Example clarifying output:",
+    clarifyingExample,
     "",
     `User ingredients:\n${ingredientsText}`,
     `User preferences: ${preferencesText}`,
@@ -99,10 +125,14 @@ async function requestModel(prompt: string, apiKey: string): Promise<string> {
   return rawContent;
 }
 
-function parseAndValidateRecipe(raw: string, requestId: string, attempt: number): GeneratedRecipe | null {
+function parseAndValidateRecipe(
+  raw: string,
+  requestId: string,
+  attempt: number
+): GeneratedRecipeResult | null {
   try {
     const parsed = JSON.parse(raw);
-    const result = GeneratedRecipeSchema.safeParse(parsed);
+    const result = GeneratedRecipeResultSchema.safeParse(parsed);
     if (!result.success) {
       console.warn("[ai.validate.schema_error]", {
         requestId,
@@ -143,10 +173,25 @@ export async function generateRecipeFromAI(
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const raw = await requestModel(attempt === 1 ? basePrompt : retryPrompt, apiKey);
-      const recipe = parseAndValidateRecipe(raw, requestId, attempt);
+      const parsedResult = parseAndValidateRecipe(raw, requestId, attempt);
 
-      if (recipe) {
-        return { ok: true, recipe, attempts: attempt };
+      if (parsedResult) {
+        if ("clarifyingQuestion" in parsedResult) {
+          return {
+            ok: true,
+            result: { clarifyingQuestion: parsedResult.clarifyingQuestion },
+            attempts: attempt,
+          };
+        }
+
+        return {
+          ok: true,
+          result: {
+            recipe: parsedResult.recipe,
+            assumptions: parsedResult.assumptions,
+          },
+          attempts: attempt,
+        };
       }
 
       console.warn("[ai.generate.validation_failed]", {

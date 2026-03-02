@@ -84,14 +84,25 @@ export async function POST(request: Request) {
     requestId,
     attempts: result.attempts,
     durationMs,
-    missingIngredientCount: result.recipe.missingIngredients.length,
+    hasClarifyingQuestion: "clarifyingQuestion" in result.result,
+    missingIngredientCount:
+      "recipe" in result.result ? result.result.recipe.missingIngredients.length : undefined,
   });
 
+  const successPayload =
+    "clarifyingQuestion" in result.result
+      ? {
+          requestId,
+          clarifyingQuestion: result.result.clarifyingQuestion,
+        }
+      : {
+          requestId,
+          recipe: result.result.recipe,
+          assumptions: result.result.assumptions ?? [],
+        };
+
   return NextResponse.json(
-    {
-      requestId,
-      recipe: result.recipe,
-    },
+    successPayload,
     { status: 200 }
   );
 }
