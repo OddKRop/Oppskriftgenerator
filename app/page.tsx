@@ -71,6 +71,25 @@ export default function Home() {
     setRecipeError(null);
   };
 
+  const handleCopyMissingIngredients = async () => {
+    if (!recipe || !recipe.missingIngredients || recipe.missingIngredients.length === 0) {
+      return;
+    }
+
+    const lines = recipe.missingIngredients
+      .slice(0, 5)
+      .map((item) => (item.reason ? `${item.item} - ${item.reason}` : item.item))
+      .join("\n");
+
+    if (!lines) return;
+
+    try {
+      await navigator.clipboard.writeText(lines);
+    } catch (error) {
+      console.error("Failed to copy shopping list", error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-10 shadow-xl shadow-black/30 md:px-10">
@@ -176,19 +195,34 @@ export default function Home() {
                 </ol>
               </div>
 
-              {recipe.missingIngredients.length > 0 ? (
-                <div>
-                  <h3 className="mb-2 text-lg font-semibold">Mangler</h3>
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold">Manglende ingredienser (ma kjopes)</h3>
+                  {recipe.missingIngredients.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={handleCopyMissingIngredients}
+                      className="rounded-md border border-zinc-600 px-3 py-1 text-sm font-medium text-zinc-100 transition hover:bg-zinc-700"
+                    >
+                      Kopier handleliste
+                    </button>
+                  ) : null}
+                </div>
+                {recipe.missingIngredients.length > 0 ? (
                   <ul className="list-disc space-y-1 pl-5 text-zinc-300">
-                    {recipe.missingIngredients.map((item, index) => (
+                    {recipe.missingIngredients.slice(0, 5).map((item, index) => (
                       <li key={`${item.item}-${index}`}>
                         {item.item}
                         {item.reason ? ` - ${item.reason}` : ""}
                       </li>
                     ))}
                   </ul>
-                </div>
-              ) : null}
+                ) : (
+                  <p className="text-sm text-emerald-400">
+                    You can make this with what you have ✅
+                  </p>
+                )}
+              </div>
 
               {recipe.notes && recipe.notes.length > 0 ? (
                 <div>
