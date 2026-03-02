@@ -22,16 +22,34 @@ function buildPrompt(input: GenerateRecipeInput): string {
   const ingredientsText = input.ingredients.map((item) => `- ${item}`).join("\n");
   const preferencesText = input.preferences?.trim() ? input.preferences.trim() : "None";
 
+  const schemaExample = JSON.stringify(
+    {
+      id: "pasta-carbonara",
+      title: "Pasta Carbonara",
+      servings: 2,
+      timeMinutes: 25,
+      ingredients: [{ item: "pasta", quantity: "200g" }, { item: "eggs" }],
+      steps: ["Boil pasta.", "Mix eggs and cheese.", "Combine and serve."],
+      missingIngredients: [{ item: "guanciale", reason: "Not provided by user" }],
+      notes: ["Best served immediately"],
+    },
+    null,
+    2
+  );
+
   return [
-    "Generate exactly one recipe as strict JSON.",
+    "Generate exactly one recipe as strict JSON. No markdown. No prose. No code fences.",
     "Rules:",
     "- Prioritize using the user's ingredients.",
-    "- Max 5 missing ingredients.",
-    "- Weeknight friendly, under 40 minutes unless allowLongerTime is true.",
-    "- Output must be valid JSON only. No markdown. No prose.",
-    "- JSON keys must match this exact schema:",
-    '{ "id": "string", "title": "string", "servings": "number optional", "timeMinutes": "number optional", "ingredients": [{"item":"string","quantity":"string optional"}], "steps": ["string"], "missingIngredients": [{"item":"string","reason":"string optional"}], "notes": ["string optional"] }',
-    `allowLongerTime: ${input.allowLongerTime ? "true" : "false"}`,
+    "- List at most 5 missing ingredients.",
+    `- Keep under 40 minutes unless allowLongerTime is ${input.allowLongerTime ? "true (longer is fine)" : "false"}.`,
+    "- For optional fields (servings, timeMinutes, quantity, reason, notes): omit the key entirely if not applicable. Do NOT use null.",
+    "- missingIngredients must always be present as an array (use [] if none are missing).",
+    "- The id must be a short kebab-case slug, e.g. 'chicken-stir-fry'.",
+    "",
+    "Example output:",
+    schemaExample,
+    "",
     `User ingredients:\n${ingredientsText}`,
     `User preferences: ${preferencesText}`,
   ].join("\n");
@@ -79,15 +97,26 @@ async function requestModel(prompt: string, apiKey: string): Promise<string> {
   return rawContent;
 }
 
-function parseAndValidateRecipe(raw: string): GeneratedRecipe | null {
+function parseAndValidateRecipe(raw: string, requestId: string, attempt: number): GeneratedRecipe | null {
   try {
     const parsed = JSON.parse(raw);
     const result = GeneratedRecipeSchema.safeParse(parsed);
     if (!result.success) {
+      console.warn("[ai.validate.schema_error]", {
+        requestId,
+        attempt,
+        issues: result.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
+      });
       return null;
     }
     return result.data;
-  } catch {
+  } catch (err) {
+    console.warn("[ai.validate.parse_error]", {
+      requestId,
+      attempt,
+      message: err instanceof Error ? err.message : "Unknown parse error",
+      rawSnippet: raw.slice(0, 300),
+    });
     return null;
   }
 }
@@ -112,7 +141,7 @@ export async function generateRecipeFromAI(
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const raw = await requestModel(attempt === 1 ? basePrompt : retryPrompt, apiKey);
-      const recipe = parseAndValidateRecipe(raw);
+      const recipe = parseAndValidateRecipe(raw, requestId, attempt);
 
       if (recipe) {
         return { ok: true, recipe, attempts: attempt };
