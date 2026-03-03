@@ -166,13 +166,15 @@ export default function Home() {
   }, []);
 
   return (
-    <div className={`min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100 ${hasRecipe ? "pb-32" : ""}`}>
-      <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-10 shadow-xl shadow-black/30 md:px-10">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-3xl font-bold text-zinc-100">Oppskriftgenerator AI</h1>
+    <div
+      className={`min-h-screen overflow-x-hidden bg-zinc-950 px-4 py-10 text-zinc-100 ${hasRecipe ? "pb-44 sm:pb-32" : ""}`}
+    >
+      <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-10 shadow-xl shadow-black/30 sm:px-6 md:px-10">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-2xl font-bold text-zinc-100 sm:text-3xl">Oppskriftgenerator AI</h1>
           <Link
             href="/favorites"
-            className="rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+            className="w-full rounded-md border border-zinc-700 px-3 py-2 text-center text-sm font-medium text-zinc-200 transition hover:bg-zinc-800 sm:w-auto"
           >
             Favoritter
           </Link>
@@ -217,18 +219,18 @@ export default function Home() {
           </label>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <button
             onClick={generateRecipe}
             disabled={isLoading}
-            className="rounded-lg bg-zinc-100 px-5 py-3 font-medium text-zinc-900 transition hover:bg-zinc-300 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-lg bg-zinc-100 px-5 py-3 font-medium text-zinc-900 transition hover:bg-zinc-300 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             Generer oppskrift
           </button>
           <button
             onClick={resetRecipe}
             disabled={isLoading}
-            className="rounded-lg border border-zinc-700 px-5 py-3 font-medium text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-lg border border-zinc-700 px-5 py-3 font-medium text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             Nullstill
           </button>
@@ -321,13 +323,13 @@ export default function Home() {
               </div>
 
               <div>
-                <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="mb-2 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-lg font-semibold">Manglende ingredienser (må kjøpes)</h3>
                   {recipe.missingIngredients.length > 0 ? (
                     <button
                       type="button"
                       onClick={handleCopyMissingIngredients}
-                      className="rounded-md border border-zinc-600 px-3 py-1 text-sm font-medium text-zinc-100 transition hover:bg-zinc-700"
+                      className="w-full rounded-md border border-zinc-600 px-3 py-1 text-sm font-medium text-zinc-100 transition hover:bg-zinc-700 sm:w-auto"
                     >
                       Kopier handleliste
                     </button>
@@ -366,7 +368,7 @@ export default function Home() {
 
       {hasRecipe ? (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-zinc-700 bg-zinc-950/95 p-3 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-3xl gap-3">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 sm:flex-row">
             <button
               type="button"
               onClick={generateRecipe}
