@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateRecipeFromAI } from "@/lib/ai/generateRecipe";
 import { GenerateRecipeInputSchema } from "@/lib/schema/generatedRecipe";
+import { checkRateLimit } from "@/lib/security/ratelimit";
 
 type InvalidInputBody = {
   error: string;
@@ -13,9 +14,50 @@ type ServerErrorBody = {
   requestId: string;
 };
 
+function getClientIp(request: Request): string {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    const firstIp = forwardedFor.split(",")[0]?.trim();
+    if (firstIp) {
+      return firstIp;
+    }
+  }
+
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp) {
+    return realIp;
+  }
+
+  return "unknown";
+}
+
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
   const startedAtMs = Date.now();
+  const ip = getClientIp(request);
+  const limit = await checkRateLimit(ip);
+
+  if (!limit.ok) {
+    console.warn("[RateLimit]", {
+      ip,
+      reason: limit.reason,
+      path: "/api/generate",
+    });
+
+    const reset = limit.reset ?? Math.ceil((Date.now() + 60_000) / 1000);
+    const retryAfter = Math.max(1, reset - Math.ceil(Date.now() / 1000));
+
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(retryAfter),
+          "X-RateLimit-Reset": String(reset),
+        },
+      }
+    );
+  }
 
   let payload: unknown;
 

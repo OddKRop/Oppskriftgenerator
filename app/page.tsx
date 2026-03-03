@@ -65,6 +65,8 @@ export default function Home() {
               ? ` (${data.details.join(", ")})`
               : "";
           setRecipeError(`Ugyldig input${detailText}`);
+        } else if (response.status === 429) {
+          setRecipeError("For mange forespørsler akkurat nå. Vent litt og prøv igjen.");
         } else {
           setRecipeError("Kunne ikke generere oppskrift nå. Prøv igjen.");
         }
