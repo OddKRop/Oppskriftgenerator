@@ -35,6 +35,63 @@ const FORBIDDEN_UNIT_PATTERNS = [
   /\b\d+\s?g\b/i,
 ];
 
+function normalizeIngredient(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function enforceMissingIngredientsConsistency(
+  recipe: GeneratedRecipe,
+  userIngredients: string[]
+): { recipe: GeneratedRecipe; autoAddedCount: number } {
+  const userSet = new Set(userIngredients.map((item) => normalizeIngredient(item)).filter(Boolean));
+  const uniqueRecipeIngredients: Array<{ item: string; normalized: string }> = [];
+  const seenRecipeIngredients = new Set<string>();
+
+  for (const ingredient of recipe.ingredients) {
+    const normalized = normalizeIngredient(ingredient.item);
+    if (!normalized || seenRecipeIngredients.has(normalized)) {
+      continue;
+    }
+
+    seenRecipeIngredients.add(normalized);
+    uniqueRecipeIngredients.push({
+      item: ingredient.item,
+      normalized,
+    });
+  }
+
+  const missingFromUser = uniqueRecipeIngredients.filter(
+    (ingredient) => !userSet.has(ingredient.normalized)
+  );
+
+  const missingByKey = new Map(
+    recipe.missingIngredients.map((ingredient) => [normalizeIngredient(ingredient.item), ingredient] as const)
+  );
+
+  const normalizedMissing = missingFromUser.map((ingredient) => {
+    const fromModel = missingByKey.get(ingredient.normalized);
+    return (
+      fromModel ?? {
+        item: ingredient.item,
+        reason: "ikke oppgitt av bruker",
+      }
+    );
+  });
+
+  const nextMissingIngredients = normalizedMissing.slice(0, 5);
+  const autoAddedCount = nextMissingIngredients.filter(
+    (ingredient) => !missingByKey.has(normalizeIngredient(ingredient.item))
+  ).length;
+
+  return {
+    recipe: {
+      ...recipe,
+      missingIngredients: nextMissingIngredients,
+    },
+    autoAddedCount,
+  };
+}
+
 function buildPrompt(input: GenerateRecipeInput): string {
   const ingredientsText = input.ingredients.map((item) => `- ${item}`).join("\n");
   const preferencesText = input.preferences?.trim() ? input.preferences.trim() : "Ingen";
@@ -57,8 +114,7 @@ function buildPrompt(input: GenerateRecipeInput): string {
         ],
         missingIngredients: [{ item: "bacon", reason: "til steking" }],
         notes: ["Smaker best nylaget."],
-      },
-      assumptions: ["Antok at du har salt og pepper hjemme."],
+      }
     },
     null,
     2
@@ -85,7 +141,10 @@ function buildPrompt(input: GenerateRecipeInput): string {
     "Regler:",
     "- Prioriter ingrediensene brukeren allerede har.",
     "- List maks 5 manglende ingredienser.",
+    "- Du må sammenligne brukerens ingrediensliste strengt mot oppskriftens fulle ingrediensliste.",
+    "- Hver ingrediens i recipe.ingredients som ikke finnes i brukerens ingrediensliste må stå i missingIngredients.",
     "- Ta bare med faktisk manglende ingredienser i missingIngredients (varer brukeren ikke har oppgitt).",
+    "- Ikke anta at brukeren har basisvarer i skapet med mindre de er eksplisitt oppgitt.",
     "- For hver missingIngredients-post, bruk en kort norsk grunn, for eksempel 'til saus', 'til topping' eller 'til servering'.",
     `- Hold deg under 40 minutter med mindre allowLongerTime er ${input.allowLongerTime ? "true (lengre tid er ok)" : "false"}.`,
     "- Hold tonen praktisk og hverdagslig, med enkel fremgangsmåte og vanlige råvarer.",
@@ -97,7 +156,7 @@ function buildPrompt(input: GenerateRecipeInput): string {
     "  1) { \"recipe\": { ... }, \"assumptions\"?: [ ... ] }",
     "  2) { \"clarifyingQuestion\": \"...\" }",
     "- Hvis du er usikker, still nøyaktig ett clarifyingQuestion og ikke inkluder recipe eller assumptions.",
-    "- Hvis du kan gjøre en rimelig antakelse, returner recipe og eventuelt assumptions. Ikke inkluder clarifyingQuestion i så fall.",
+    "- assumptions er kun for korte, praktiske antakelser som er tydelig avledet av brukerens input.",
     "",
     "Eksempel på oppskriftssvar:",
     recipeExample,
@@ -253,7 +312,7 @@ export async function generateRecipeFromAI(
 
   const basePrompt = buildPrompt(input);
   const retryPrompt =
-    `${basePrompt}\nForrige svar var ugyldig. Returner gyldig JSON på norsk bokmål uten engelske fraser eller ugyldige enheter.`;
+    `${basePrompt}\nForrige svar var ugyldig. Returner gyldig JSON på norsk bokmål uten engelske fraser eller ugyldige enheter. Husk at alle manglende ingredienser må listes i missingIngredients.`;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -269,10 +328,19 @@ export async function generateRecipeFromAI(
           };
         }
 
+        const consistencyChecked = enforceMissingIngredientsConsistency(parsedResult.recipe, input.ingredients);
+        if (consistencyChecked.autoAddedCount > 0) {
+          console.warn("[ai.generate.missing_ingredients_auto_added]", {
+            requestId,
+            attempt,
+            autoAddedCount: consistencyChecked.autoAddedCount,
+          });
+        }
+
         return {
           ok: true,
           result: {
-            recipe: parsedResult.recipe,
+            recipe: consistencyChecked.recipe,
             assumptions: parsedResult.assumptions,
           },
           attempts: attempt,
