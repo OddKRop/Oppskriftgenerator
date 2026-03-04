@@ -6,7 +6,7 @@ type EmptyStateProps = {
 };
 
 export default function EmptyState({
-  title = "No content yet",
+  title = "Ingenting her ennå",
   description,
   ctaLabel,
   onAction,

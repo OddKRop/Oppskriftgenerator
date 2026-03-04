@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const retryAfter = Math.max(1, reset - Math.ceil(Date.now() / 1000));
 
     return NextResponse.json(
-      { error: "Too many requests. Please try again later." },
+      { error: "For mange forespørsler. Prøv igjen senere." },
       {
         status: 429,
         headers: {
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     payload = await request.json();
   } catch {
     const body: InvalidInputBody = {
-      error: "Invalid JSON body.",
+      error: "Ugyldig JSON-body.",
       requestId,
     };
     return NextResponse.json(body, { status: 400 });
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     });
 
     const body: InvalidInputBody = {
-      error: "Invalid input.",
+      error: "Ugyldig input.",
       details,
       requestId,
     };
@@ -114,8 +114,8 @@ export async function POST(request: Request) {
     const body: ServerErrorBody = {
       error:
         result.code === "missing_api_key"
-          ? "Server missing AI configuration."
-          : "Failed to generate recipe. Please try again.",
+          ? "Server mangler AI-konfigurasjon."
+          : "Kunne ikke generere oppskrift. Prøv igjen.",
       requestId,
     };
 

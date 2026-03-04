@@ -6,10 +6,10 @@ type ErrorStateProps = {
 };
 
 export default function ErrorState({
-  title = "Something went wrong",
+  title = "Noe gikk galt",
   message,
   onRetry,
-  retryLabel = "Retry",
+  retryLabel = "Prøv igjen",
 }: ErrorStateProps) {
   return (
     <div className="rounded-lg border border-red-900 bg-red-950/40 p-4 text-red-100">

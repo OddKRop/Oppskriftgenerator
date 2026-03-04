@@ -15,7 +15,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
       <div className="mx-auto w-full max-w-xl">
         <ErrorState
           title="Noe gikk galt"
-          message="Appen traff en runtime-feil. Prøv å laste inn siden på nytt."
+          message="Appen traff en kjøretidsfeil. Prøv å laste inn siden på nytt."
           onRetry={reset}
           retryLabel="Prøv igjen"
         />

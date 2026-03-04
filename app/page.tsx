@@ -60,11 +60,7 @@ export default function Home() {
 
       if (!response.ok) {
         if (response.status === 400) {
-          const detailText =
-            Array.isArray(data.details) && data.details.length > 0
-              ? ` (${data.details.join(", ")})`
-              : "";
-          setRecipeError(`Ugyldig input${detailText}`);
+          setRecipeError("Ugyldig forespørsel. Sjekk feltene og prøv igjen.");
         } else if (response.status === 429) {
           setRecipeError("For mange forespørsler akkurat nå. Vent litt og prøv igjen.");
         } else {
@@ -118,7 +114,7 @@ export default function Home() {
     try {
       await navigator.clipboard.writeText(lines);
     } catch (error) {
-      console.error("Failed to copy shopping list", error);
+      console.error("Kunne ikke kopiere handleliste", error);
     }
   };
 
@@ -238,7 +234,7 @@ export default function Home() {
 
         <section className="w-full rounded-xl border border-zinc-700 bg-zinc-800 p-6 text-zinc-100">
           {isLoading ? (
-            <LoadingState text="Generating..." />
+            <LoadingState text="Genererer..." />
           ) : recipeError ? (
             <ErrorState title="Generering feilet" message={recipeError} onRetry={generateRecipe} />
           ) : clarifyingQuestion ? (
@@ -346,7 +342,7 @@ export default function Home() {
                   </ul>
                 ) : (
                   <p className="text-sm text-emerald-400">
-                    You can make this with what you have ✅
+                    Du kan lage denne med det du har ✅
                   </p>
                 )}
               </div>

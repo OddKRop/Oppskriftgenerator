@@ -8,7 +8,7 @@ export async function GET() {
     return NextResponse.json(
       {
         ok: false,
-        message: "OPENAI_API_KEY is not configured on the server.",
+        message: "OPENAI_API_KEY er ikke konfigurert på serveren.",
       },
       { status: 503 }
     );

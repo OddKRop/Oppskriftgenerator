@@ -23,23 +23,42 @@ type GenerateRecipeResult =
       attempts: number;
     };
 
+const CLEAR_ENGLISH_PATTERNS = [
+  /\b(do you have|you can|best served|to taste|for sauce|for garnish|for serving)\b/i,
+  /\b(boil|mix|combine|preheat|bake|cook|serve|chop|slice|stir)\b/i,
+  /\b(chicken|beef|pork|onion|garlic|cheese)\b/i,
+  /\b(optional|weeknight|pantry)\b/i,
+];
+
+const FORBIDDEN_UNIT_PATTERNS = [
+  /\b(cups?|ounces?|oz|tablespoons?|tbsp|teaspoons?|tsp|pounds?|lbs?)\b/i,
+  /\b\d+\s?g\b/i,
+];
+
 function buildPrompt(input: GenerateRecipeInput): string {
   const ingredientsText = input.ingredients.map((item) => `- ${item}`).join("\n");
-  const preferencesText = input.preferences?.trim() ? input.preferences.trim() : "None";
+  const preferencesText = input.preferences?.trim() ? input.preferences.trim() : "Ingen";
 
   const recipeExample = JSON.stringify(
     {
       recipe: {
         id: "pasta-carbonara",
-        title: "Pasta Carbonara",
+        title: "Kremet pasta med bacon",
         servings: 2,
         timeMinutes: 25,
-        ingredients: [{ item: "pasta", quantity: "200g" }, { item: "eggs" }],
-        steps: ["Boil pasta.", "Mix eggs and cheese.", "Combine and serve."],
-        missingIngredients: [{ item: "guanciale", reason: "for sauce" }],
-        notes: ["Best served immediately"],
+        ingredients: [
+          { item: "pasta", quantity: "200 gram" },
+          { item: "egg", quantity: "2 stk" },
+        ],
+        steps: [
+          "Kok pasta etter anvisning på pakken.",
+          "Visp egg lett sammen i en bolle.",
+          "Bland pasta og egg forsiktig, og server med en gang.",
+        ],
+        missingIngredients: [{ item: "bacon", reason: "til steking" }],
+        notes: ["Smaker best nylaget."],
       },
-      assumptions: ["Assumed pantry staples include salt and pepper."],
+      assumptions: ["Antok at du har salt og pepper hjemme."],
     },
     null,
     2
@@ -47,39 +66,47 @@ function buildPrompt(input: GenerateRecipeInput): string {
 
   const clarifyingExample = JSON.stringify(
     {
-      clarifyingQuestion: "Do you have eggs available?",
+      clarifyingQuestion: "Har du egg tilgjengelig?",
     },
     null,
     2
   );
 
   return [
-    "Generate a weeknight-friendly recipe as strict JSON. No markdown. No prose. No code fences.",
-    "Rules:",
-    "- Prioritize using the user's ingredients.",
-    "- List at most 5 missing ingredients.",
-    "- Only include truly missing ingredients in missingIngredients (items the user did NOT list).",
-    "- For each missingIngredients entry, use a short reason phrase like 'for sauce', 'for garnish', or 'for serving' when applicable.",
-    `- Keep under 40 minutes unless allowLongerTime is ${input.allowLongerTime ? "true (longer is fine)" : "false"}.`,
-    "- Make the recipe weeknight-friendly: simple process, common ingredients, low complexity.",
-    "- timeMinutes is required and must be a realistic total time estimate.",
-    "- For optional fields (servings, quantity, reason, notes): omit the key entirely if not applicable. Do NOT use null.",
-    "- missingIngredients must always be present as an array (use [] if none are missing).",
-    "- The id must be a short kebab-case slug, e.g. 'chicken-stir-fry'.",
-    "- Output shape must be exactly one of these:",
+    "Lag en hverdagsvennlig oppskrift som streng JSON. Ingen markdown. Ingen fritekst utenfor JSON.",
+    "Språkkrav:",
+    "- All tekst må være på norsk bokmål.",
+    "- Ikke bruk engelske ord eller fraser, med mindre det er helt uunngåelig (for eksempel BBQ).",
+    "- Bruk norske ingrediensnavn og norsk kjøkkenspråk.",
+    "- steps, ingredients, missingIngredients, notes og assumptions skal være på norsk.",
+    "Enhetskrav:",
+    "- Bruk metriske/norske enheter: dl, ss, ts, gram, kg.",
+    "- Ikke bruk cups, ounces, tablespoons eller teaspoons.",
+    "Regler:",
+    "- Prioriter ingrediensene brukeren allerede har.",
+    "- List maks 5 manglende ingredienser.",
+    "- Ta bare med faktisk manglende ingredienser i missingIngredients (varer brukeren ikke har oppgitt).",
+    "- For hver missingIngredients-post, bruk en kort norsk grunn, for eksempel 'til saus', 'til topping' eller 'til servering'.",
+    `- Hold deg under 40 minutter med mindre allowLongerTime er ${input.allowLongerTime ? "true (lengre tid er ok)" : "false"}.`,
+    "- Hold tonen praktisk og hverdagslig, med enkel fremgangsmåte og vanlige råvarer.",
+    "- timeMinutes er obligatorisk og må være et realistisk totalestimat.",
+    "- For valgfrie felt (servings, quantity, reason, notes): utelat nøkkelen hvis den ikke er relevant. Ikke bruk null.",
+    "- missingIngredients må alltid være en array (bruk [] hvis ingen mangler).",
+    "- id må være en kort kebab-case slug, for eksempel 'kylling-i-form'.",
+    "- Output-format må være nøyaktig én av disse:",
     "  1) { \"recipe\": { ... }, \"assumptions\"?: [ ... ] }",
     "  2) { \"clarifyingQuestion\": \"...\" }",
-    "- If unsure, ask exactly one clarifyingQuestion and do NOT include recipe or assumptions.",
-    "- If you can make a reasonable assumption, return recipe and optionally assumptions. Do NOT include clarifyingQuestion in that case.",
+    "- Hvis du er usikker, still nøyaktig ett clarifyingQuestion og ikke inkluder recipe eller assumptions.",
+    "- Hvis du kan gjøre en rimelig antakelse, returner recipe og eventuelt assumptions. Ikke inkluder clarifyingQuestion i så fall.",
     "",
-    "Example recipe output:",
+    "Eksempel på oppskriftssvar:",
     recipeExample,
     "",
-    "Example clarifying output:",
+    "Eksempel på avklaringsspørsmål:",
     clarifyingExample,
     "",
-    `User ingredients:\n${ingredientsText}`,
-    `User preferences: ${preferencesText}`,
+    `Brukerens ingredienser:\n${ingredientsText}`,
+    `Brukerens preferanser: ${preferencesText}`,
   ].join("\n");
 }
 
@@ -98,7 +125,7 @@ async function requestModel(prompt: string, apiKey: string): Promise<string> {
         {
           role: "system",
           content:
-            "You are a cooking assistant. Return valid JSON only, matching the requested keys and constraints.",
+            "Du er en matlagingsassistent. Svar kun med gyldig JSON som følger kravene, og skriv all tekst på norsk bokmål.",
         },
         {
           role: "user",
@@ -141,6 +168,18 @@ function parseAndValidateRecipe(
       });
       return null;
     }
+
+    const languageValidation = validateLanguageAndUnits(result.data);
+    if (!languageValidation.ok) {
+      console.warn("[ai.validate.language_error]", {
+        requestId,
+        attempt,
+        reason: languageValidation.reason,
+        match: languageValidation.match,
+      });
+      return null;
+    }
+
     return result.data;
   } catch (err) {
     console.warn("[ai.validate.parse_error]", {
@@ -151,6 +190,51 @@ function parseAndValidateRecipe(
     });
     return null;
   }
+}
+
+function validateLanguageAndUnits(
+  result: GeneratedRecipeResult
+): { ok: true } | { ok: false; reason: "english_phrase" | "invalid_unit"; match: string } {
+  const textParts: string[] = [];
+
+  if ("clarifyingQuestion" in result) {
+    textParts.push(result.clarifyingQuestion);
+  } else {
+    textParts.push(result.recipe.title);
+    textParts.push(...result.recipe.steps);
+    textParts.push(...result.recipe.ingredients.map((ingredient) => ingredient.item));
+    textParts.push(
+      ...result.recipe.ingredients
+        .map((ingredient) => ingredient.quantity)
+        .filter((value): value is string => typeof value === "string")
+    );
+    textParts.push(...result.recipe.missingIngredients.map((ingredient) => ingredient.item));
+    textParts.push(
+      ...result.recipe.missingIngredients
+        .map((ingredient) => ingredient.reason)
+        .filter((value): value is string => typeof value === "string")
+    );
+    textParts.push(...(result.recipe.notes ?? []));
+    textParts.push(...(result.assumptions ?? []));
+  }
+
+  const joined = textParts.join("\n");
+
+  for (const pattern of CLEAR_ENGLISH_PATTERNS) {
+    const match = joined.match(pattern);
+    if (match) {
+      return { ok: false, reason: "english_phrase", match: match[0] };
+    }
+  }
+
+  for (const pattern of FORBIDDEN_UNIT_PATTERNS) {
+    const match = joined.match(pattern);
+    if (match) {
+      return { ok: false, reason: "invalid_unit", match: match[0] };
+    }
+  }
+
+  return { ok: true };
 }
 
 export async function generateRecipeFromAI(
@@ -168,7 +252,8 @@ export async function generateRecipeFromAI(
   }
 
   const basePrompt = buildPrompt(input);
-  const retryPrompt = `${basePrompt}\nYour previous answer was invalid. Return valid JSON only.`;
+  const retryPrompt =
+    `${basePrompt}\nForrige svar var ugyldig. Returner gyldig JSON på norsk bokmål uten engelske fraser eller ugyldige enheter.`;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
