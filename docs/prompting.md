@@ -70,6 +70,8 @@ Example output structure:
   "notes": ""
 }
 
+```
+
 After generation, the JSON output is validated using Zod schemas before being returned to the frontend.
 
 ---

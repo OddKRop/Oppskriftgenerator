@@ -71,9 +71,11 @@ Uses Zod schemas to validate both input and LLM output.
 
 ```bash
 npm install
-
+```
 ## Run development server
+```bash
 npm run dev
+```
 
 ## Open the application at:
 
