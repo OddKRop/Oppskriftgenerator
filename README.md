@@ -1,118 +1,150 @@
-# My Recipe Generator
+# AI Recipe Generator
 
-Minimal Next.js foundation for recipe generation UI and upcoming AI pipeline.
+An AI-powered web application that generates structured recipes based on ingredients provided by the user.  
+The system uses a large language model (LLM) to generate recipes while enforcing strict schema validation to ensure reliable and structured output.
 
-## Setup
+The goal of the project is both to build a useful tool and to explore how to design robust AI-powered applications with validation, error handling, and controlled prompt design.
 
-1. Install dependencies:
+---
+
+# Features
+
+- Generate recipes from available ingredients
+- Structured JSON output validated with schema
+- Detection of missing ingredients
+- Retry mechanism if the LLM returns invalid output
+- Rate limiting to prevent API abuse
+- Clean UI for entering ingredients and viewing results
+
+---
+
+# Tech Stack
+
+- **Frontend:** Next.js
+- **Backend:** Next.js API routes
+- **Language:** TypeScript
+- **LLM Provider:** OpenAI API
+- **Validation:** Zod
+- **Runtime:** Node.js
+
+---
+
+# Project Structure
+
+/app
+page.tsx
+
+/api
+recipe/route.ts
+
+/lib
+ai/generateRecipe.ts
+
+/schema
+recipeSchema.ts
+
+/docs
+architecture.md
+prompting.md
+evaluation.md
+
+
+### Key Components
+
+**Frontend (page.tsx)**  
+Handles user input and displays the generated recipe.
+
+**API Route (route.ts)**  
+Receives requests from the UI, validates input, applies rate limiting, and forwards the request to the AI generation layer.
+
+**LLM Layer (generateRecipe.ts)**  
+Builds prompts and sends requests to the OpenAI API to generate structured recipes.
+
+**Validation Layer**  
+Uses Zod schemas to validate both input and LLM output.
+
+---
+
+# Getting Started
+
+## Install dependencies
 
 ```bash
 npm install
-```
 
-2. Create local env file:
-
-```bash
-cp .env.example .env.local
-```
-
-3. Add your keys to `.env.local`:
-
-```bash
-OPENAI_API_KEY=your_key_here
-UPSTASH_REDIS_REST_URL=your_upstash_url_here
-UPSTASH_REDIS_REST_TOKEN=your_upstash_token_here
-```
-
-4. Start dev server:
-
-```bash
+## Run development server
 npm run dev
-```
 
-## Environment variables
+## Open the application at:
 
-- `OPENAI_API_KEY` is read from `process.env.OPENAI_API_KEY`.
-- Optional: `OPENAI_MODEL` (defaults to `gpt-4o-mini`).
-- `UPSTASH_REDIS_REST_URL` is required for API rate limiting.
-- `UPSTASH_REDIS_REST_TOKEN` is required for API rate limiting.
-- No API key should be hardcoded in source files.
-- If the key is missing, the app shows a friendly UI error and logs a clear server console message.
+http://localhost:3000
 
-## Project structure
+## Environment Variables
 
-```text
-app/
-components/
-lib/
-  ai/
-  schema/
-  utils/
-types/
-```
+Create a .env.local file and add:
 
-- AI logic: `lib/ai`
-- Schemas and static recipe data: `lib/schema`
-- Shared helpers: `lib/utils`
-- Type definitions: `types`
+OPENAI_API_KEY=your_api_key_here
 
-## AI generation API
+## Error Handling
 
-Single server entrypoint:
+The system includes multiple layers of protection:
 
-- `POST /api/generate`
+- Input validation before requests are sent
+- Schema validation of LLM output
+- Automatic retry if the model returns invalid data
+- Error responses if generation fails
 
-Input (validated with Zod):
+These safeguards help ensure that the application returns reliable structured data.
 
-```json
-{
-  "ingredients": ["chicken", "rice"],
-  "preferences": "optional string",
-  "allowLongerTime": false
-}
-```
+---
 
-Responses:
+## Security Considerations
 
-- `200`: `{ requestId, recipe }` (recipe validated against shared schema)
-- `400`: invalid request input
-- `429`: too many requests (rate-limited)
-- `500`: safe error message (provider failure, invalid/unparseable model output, or missing server key)
+Basic safeguards currently implemented include:
 
-Server logs include `requestId`, duration/timing, and validation failures. Full user prompt text is not logged.
+- Input validation
+- Rate limiting
+- Controlled prompt structure
 
-## Rate limiting and quota
+Future improvements may include stronger protection against prompt injection attacks.
 
-`POST /api/generate` is protected with Upstash Redis + `@upstash/ratelimit`.
+---
 
-Current defaults (per IP):
+## Documentation
 
-- 5 requests per 60 seconds
-- 25 requests per day
-- Unknown IP gets stricter limits
+Additional documentation is available in the `/docs` directory.
 
-When a limit is hit:
+- `architecture.md` – system architecture and data flow
+- `prompting.md` – prompt design and LLM interaction strategy
+- `evaluation.md` – evaluation and quality considerations
 
-- API returns `429` with `{ "error": "Too many requests. Please try again later." }`
-- `Retry-After` and `X-RateLimit-Reset` headers are included
-- Server logs warning: `console.warn("[RateLimit]", { ip, reason, path })`
-- OpenAI is not called
+---
 
-You can change the limits in `lib/security/ratelimit.ts`.
+## Future Improvements
 
-## Manual test checklist
+Planned improvements include:
 
-1. Start app with valid OpenAI + Upstash env vars.
-2. Send 6 quick POST requests to `/api/generate` from same IP within 60 seconds.
-3. Confirm request 6 returns `429` and JSON error.
-4. Continue sending requests until daily limit is exceeded, then confirm `429`.
-5. Check server logs for `[RateLimit]` entries.
-6. Confirm frontend shows a friendly error when `429` is returned.
+- Token usage and cost monitoring
+- Improved logging and observability
+- Retrieval-Augmented Generation (RAG) for recipe knowledge
+- Prompt versioning
+- Automated evaluation of generated recipes
 
-## UI state conventions
+---
 
-- `LoadingState`: spinner + "Generating..."
-- `ErrorState`: friendly message + retry action when possible
-- `EmptyState`: clear CTA to start generation
+## Purpose of the Project
 
-These states are used in `app/page.tsx` to keep behavior consistent.
+This project is also used as a learning platform to explore how to build reliable AI-powered applications.
+
+It focuses on system design concepts such as:
+
+- validation
+- prompt control
+- error handling
+- observability
+
+---
+
+## License
+
+MIT License
