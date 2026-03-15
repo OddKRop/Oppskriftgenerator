@@ -7,7 +7,7 @@ import {
   type GeneratedRecipeResult,
 } from "@/lib/schema/generatedRecipe";
 
-const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
 type GenerateRecipeResult =
@@ -201,7 +201,18 @@ async function requestModel(prompt: string, apiKey: string): Promise<string> {
 
   const data = (await response.json()) as {
     choices?: Array<{ message?: { content?: string | null } }>;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      total_tokens?: number;
+    };
   };
+
+  console.log("LLM usage:", {
+    promptTokens: data.usage?.prompt_tokens ?? 0,
+    completionTokens: data.usage?.completion_tokens ?? 0,
+    totalTokens: data.usage?.total_tokens ?? 0,
+  });
 
   const rawContent = data.choices?.[0]?.message?.content;
   if (!rawContent || typeof rawContent !== "string") {
