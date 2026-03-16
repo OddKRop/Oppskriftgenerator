@@ -8,7 +8,7 @@ import {
 } from "@/lib/schema/generatedRecipe";
 import type OpenAI from "openai";
 
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-5.4";
 
 type GenerateRecipeResult =
   | {
