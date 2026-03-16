@@ -1,13 +1,13 @@
 import "server-only";
-import { getOpenAIApiKey } from "@/lib/ai/openaiConfig";
+import { getOpenAIClient } from "@/lib/ai/openaiConfig";
 import {
   GeneratedRecipeResultSchema,
   type GenerateRecipeInput,
   type GeneratedRecipe,
   type GeneratedRecipeResult,
 } from "@/lib/schema/generatedRecipe";
+import type OpenAI from "openai";
 
-const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
 type GenerateRecipeResult =
@@ -169,57 +169,55 @@ function buildPrompt(input: GenerateRecipeInput): string {
   ].join("\n");
 }
 
-async function requestModel(prompt: string, apiKey: string): Promise<string> {
-  const response = await fetch(OPENAI_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+async function requestModel(
+  prompt: string,
+  client: OpenAI,
+  requestId: string,
+  attempt: number
+): Promise<string> {
+  const response = await client.responses.create({
+    model: OPENAI_MODEL,
+    temperature: 0.2,
+    input: [
+      {
+        role: "system",
+        content: [
+          {
+            type: "input_text",
+            text: "Du er en matlagingsassistent. Svar kun med gyldig JSON som følger kravene, og skriv all tekst pa norsk bokmal.",
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: prompt,
+          },
+        ],
+      },
+    ],
+    text: {
+      format: {
+        type: "json_object",
+      },
     },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "Du er en matlagingsassistent. Svar kun med gyldig JSON som følger kravene, og skriv all tekst på norsk bokmål.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    }),
   });
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`OpenAI request failed: ${response.status} ${text.slice(0, 250)}`);
-  }
-
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string | null } }>;
-    usage?: {
-      prompt_tokens?: number;
-      completion_tokens?: number;
-      total_tokens?: number;
-    };
-  };
-
-  console.log("LLM usage:", {
-    promptTokens: data.usage?.prompt_tokens ?? 0,
-    completionTokens: data.usage?.completion_tokens ?? 0,
-    totalTokens: data.usage?.total_tokens ?? 0,
+  console.log("[ai.generate.usage]", {
+    requestId,
+    attempt,
+    inputTokens: response.usage?.input_tokens ?? 0,
+    outputTokens: response.usage?.output_tokens ?? 0,
+    totalTokens: response.usage?.total_tokens ?? 0,
   });
 
-  const rawContent = data.choices?.[0]?.message?.content;
-  if (!rawContent || typeof rawContent !== "string") {
-    throw new Error("OpenAI response missing message content.");
+  if (!response.output_text) {
+    throw new Error("OpenAI response missing output_text.");
   }
 
-  return rawContent;
+  return response.output_text;
 }
 
 function parseAndValidateRecipe(
@@ -311,8 +309,8 @@ export async function generateRecipeFromAI(
   input: GenerateRecipeInput,
   requestId: string
 ): Promise<GenerateRecipeResult> {
-  const apiKey = getOpenAIApiKey();
-  if (!apiKey) {
+  const client = getOpenAIClient();
+  if (!client) {
     return {
       ok: false,
       code: "missing_api_key",
@@ -327,7 +325,12 @@ export async function generateRecipeFromAI(
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const raw = await requestModel(attempt === 1 ? basePrompt : retryPrompt, apiKey);
+      const raw = await requestModel(
+        attempt === 1 ? basePrompt : retryPrompt,
+        client,
+        requestId,
+        attempt
+      );
       const parsedResult = parseAndValidateRecipe(raw, requestId, attempt);
 
       if (parsedResult) {

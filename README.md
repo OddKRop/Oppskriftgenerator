@@ -23,7 +23,7 @@ The goal of the project is both to build a useful tool and to explore how to des
 - **Frontend:** Next.js
 - **Backend:** Next.js API routes
 - **Language:** TypeScript
-- **LLM Provider:** OpenAI API
+- **LLM Provider:** OpenAI Responses API
 - **Validation:** Zod
 - **Runtime:** Node.js
 
@@ -58,7 +58,7 @@ Handles user input and displays the generated recipe.
 Receives requests from the UI, validates input, applies rate limiting, and forwards the request to the AI generation layer.
 
 **LLM Layer (generateRecipe.ts)**  
-Builds prompts and sends requests to the OpenAI API to generate structured recipes.
+Builds prompts and sends requests through `client.responses.create()` to generate structured recipes.
 
 **Validation Layer**  
 Uses Zod schemas to validate both input and LLM output.
@@ -95,6 +95,12 @@ The system includes multiple layers of protection:
 - Schema validation of LLM output
 - Automatic retry if the model returns invalid data
 - Error responses if generation fails
+
+## OpenAI Integration
+
+- All recipe generation calls use the OpenAI Responses API
+- The backend parses model output from `response.output_text`
+- JSON output is still validated with Zod before it reaches the UI
 
 These safeguards help ensure that the application returns reliable structured data.
 
