@@ -176,6 +176,15 @@ async function requestModel(
   requestId: string,
   attempt: number
 ): Promise<string> {
+  const promptWords = prompt.trim() ? prompt.trim().split(/\s+/).length : 0;
+
+  console.log("[ai.generate.prompt_length]", {
+    requestId,
+    attempt,
+    promptChars: prompt.length,
+    promptWords,
+  });
+
   const response = await client.responses.create({
     model: OPENAI_MODEL,
     temperature: 0.2,
@@ -205,13 +214,12 @@ async function requestModel(
       },
     },
   });
-  const inputTokens = response.usage?.input_tokens ?? 0
-  const outputTokens = response.usage?.output_tokens ?? 0
-  const totalTokens = response.usage?.total_tokens ?? 0
+  const inputTokens = response.usage?.input_tokens ?? 0;
+  const outputTokens = response.usage?.output_tokens ?? 0;
+  const totalTokens = response.usage?.total_tokens ?? 0;
   const inputCost = (inputTokens * 0.75) / 1_000_000;
   const outputCost = (outputTokens * 4.50) / 1_000_000;
   const totalCost = inputCost + outputCost;
-
 
   console.log("[ai.generate.usage]", {
     requestId,
@@ -219,7 +227,7 @@ async function requestModel(
     inputTokens,
     outputTokens,
     totalTokens,
-    totalCost
+    totalCost,
   });
 
   if (!response.output_text) {
