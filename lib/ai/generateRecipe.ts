@@ -9,7 +9,7 @@ import {
 import type OpenAI from "openai";
 import { InputTokens } from "openai/resources/responses.mjs";
 
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-5.4";
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-5.4-mini";
 
 type GenerateRecipeResult =
   | {
@@ -208,8 +208,8 @@ async function requestModel(
   const inputTokens = response.usage?.input_tokens ?? 0
   const outputTokens = response.usage?.output_tokens ?? 0
   const totalTokens = response.usage?.total_tokens ?? 0
-  const inputCost = (inputTokens * 2.5) / 1_000_000;
-  const outputCost = (outputTokens * 15) / 1_000_000;
+  const inputCost = (inputTokens * 0.75) / 1_000_000;
+  const outputCost = (outputTokens * 4.50) / 1_000_000;
   const totalCost = inputCost + outputCost;
 
 
