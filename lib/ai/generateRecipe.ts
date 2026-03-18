@@ -7,6 +7,7 @@ import {
   type GeneratedRecipeResult,
 } from "@/lib/schema/generatedRecipe";
 import type OpenAI from "openai";
+import { InputTokens } from "openai/resources/responses.mjs";
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-5.4";
 
@@ -204,13 +205,21 @@ async function requestModel(
       },
     },
   });
+  const inputTokens = response.usage?.input_tokens ?? 0
+  const outputTokens = response.usage?.output_tokens ?? 0
+  const totalTokens = response.usage?.total_tokens ?? 0
+  const inputCost = (inputTokens * 2.5) / 1_000_000;
+  const outputCost = (outputTokens * 15) / 1_000_000;
+  const totalCost = inputCost + outputCost;
+
 
   console.log("[ai.generate.usage]", {
     requestId,
     attempt,
-    inputTokens: response.usage?.input_tokens ?? 0,
-    outputTokens: response.usage?.output_tokens ?? 0,
-    totalTokens: response.usage?.total_tokens ?? 0,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    totalCost
   });
 
   if (!response.output_text) {
