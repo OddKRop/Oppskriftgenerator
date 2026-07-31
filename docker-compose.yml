@@ -1,0 +1,20 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oppskrift-app
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    # Ollama på verten lytter kun på 127.0.0.1:11434. Med vanlig bridge-nett
+    # ville containeren ikke nådd den, og alternativet — å binde Ollama til
+    # 0.0.0.0 — ville eksponert den på LAN og Tailscale. Host-nett løser det
+    # uten å utvide Ollamas angrepsflate.
+    network_mode: host
+    environment:
+      # Med host-nett gjelder ikke portmapping; appen må selv lytte på 3003.
+      # 127.0.0.1 gjør at kun cloudflared på denne maskinen når den.
+      # 3001 = trenings-app, 3002 = fundamental-analyse-ai, 8080 = lokalai.
+      PORT: "3003"
+      HOSTNAME: "127.0.0.1"
