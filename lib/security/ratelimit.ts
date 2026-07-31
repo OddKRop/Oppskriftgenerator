@@ -1,14 +1,17 @@
 import "server-only";
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
+
+const MINUTE_MS = 60_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const RATE_LIMIT_MAX_PER_MINUTE = 5;
-const RATE_LIMIT_MINUTE_WINDOW = "60 s";
 const RATE_LIMIT_MAX_PER_DAY = 25;
-const RATE_LIMIT_DAY_WINDOW = "1 d";
 
 const UNKNOWN_IP_MAX_PER_MINUTE = 2;
 const UNKNOWN_IP_MAX_PER_DAY = 5;
+
+// Ingen enkelt-IP kan lagre mer enn dagskvoten sin, men antall distinkte IP-er
+// er ubegrenset. Over denne terskelen feies utgåtte nøkler bort.
+const SWEEP_THRESHOLD = 5_000;
 
 type LimitReason = "minute" | "day";
 
@@ -18,98 +21,74 @@ type RateLimitResult = {
   reset?: number;
 };
 
-let missingConfigLogged = false;
+// Tellingen ligger i prosessminnet: appen kjører som én container bak
+// Cloudflare Access, så det finnes ingen andre instanser å dele tilstand med.
+// Konsekvensen er at kvotene nullstilles ved restart og deploy. Åpnes appen
+// for flere brukere eller skaleres den til flere instanser, må tellingen
+// flyttes til delt lagring (Redis e.l.).
+const hits = new Map<string, number[]>();
 
-const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
-const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-const redis =
-  redisUrl && redisToken
-    ? new Redis({
-        url: redisUrl,
-        token: redisToken,
-      })
-    : null;
-
-const minuteLimiter =
-  redis &&
-  new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(RATE_LIMIT_MAX_PER_MINUTE, RATE_LIMIT_MINUTE_WINDOW),
-    prefix: "ratelimit:minute",
-  });
-
-const dayLimiter =
-  redis &&
-  new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(RATE_LIMIT_MAX_PER_DAY, RATE_LIMIT_DAY_WINDOW),
-    prefix: "ratelimit:day",
-  });
-
-const unknownMinuteLimiter =
-  redis &&
-  new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(UNKNOWN_IP_MAX_PER_MINUTE, RATE_LIMIT_MINUTE_WINDOW),
-    prefix: "ratelimit:unknown:minute",
-  });
-
-const unknownDayLimiter =
-  redis &&
-  new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(UNKNOWN_IP_MAX_PER_DAY, RATE_LIMIT_DAY_WINDOW),
-    prefix: "ratelimit:unknown:day",
-  });
+function limitsFor(ip: string) {
+  return ip === "unknown"
+    ? { perMinute: UNKNOWN_IP_MAX_PER_MINUTE, perDay: UNKNOWN_IP_MAX_PER_DAY }
+    : { perMinute: RATE_LIMIT_MAX_PER_MINUTE, perDay: RATE_LIMIT_MAX_PER_DAY };
+}
 
 function getKey(ip: string): string {
   return ip === "unknown" ? "unknown-ip" : ip;
 }
 
-export async function checkRateLimit(ip: string): Promise<RateLimitResult> {
-  if (
-    !redis ||
-    !minuteLimiter ||
-    !dayLimiter ||
-    !unknownMinuteLimiter ||
-    !unknownDayLimiter
-  ) {
-    if (!missingConfigLogged) {
-      console.error(
-        "[RateLimit] Missing Upstash config. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN."
-      );
-      missingConfigLogged = true;
+// Fjerner nøkler som ikke har hatt trafikk det siste døgnet. Kjøres kun når
+// kartet har vokst seg stort, slik at vanlige forespørsler forblir O(1).
+function sweep(now: number): void {
+  for (const [key, timestamps] of hits) {
+    const newest = timestamps[timestamps.length - 1];
+    if (newest === undefined || now - newest >= DAY_MS) {
+      hits.delete(key);
     }
-
-    return {
-      ok: false,
-      reason: "minute",
-      reset: Math.ceil((Date.now() + 60_000) / 1000),
-    };
   }
+}
 
-  const minute = ip === "unknown" ? unknownMinuteLimiter : minuteLimiter;
-  const day = ip === "unknown" ? unknownDayLimiter : dayLimiter;
+export async function checkRateLimit(ip: string): Promise<RateLimitResult> {
+  const now = Date.now();
   const key = getKey(ip);
+  const { perMinute, perDay } = limitsFor(ip);
 
-  const minuteResult = await minute.limit(key);
-  if (!minuteResult.success) {
+  if (hits.size > SWEEP_THRESHOLD) {
+    sweep(now);
+  }
+
+  // Bare innvilgede forespørsler telles, så listen kan aldri bli lengre enn
+  // dagskvoten. Avviste forespørsler bruker ikke opp kvote — de koster
+  // ingenting utover et oppslag her.
+  const timestamps = (hits.get(key) ?? []).filter(
+    (timestamp) => now - timestamp < DAY_MS
+  );
+
+  const withinMinute = timestamps.filter(
+    (timestamp) => now - timestamp < MINUTE_MS
+  );
+
+  if (withinMinute.length >= perMinute) {
+    const oldest = withinMinute[0];
     return {
       ok: false,
       reason: "minute",
-      reset: Math.ceil(minuteResult.reset / 1000),
+      reset: Math.ceil((oldest + MINUTE_MS) / 1000),
     };
   }
 
-  const dayResult = await day.limit(key);
-  if (!dayResult.success) {
+  if (timestamps.length >= perDay) {
+    const oldest = timestamps[0];
     return {
       ok: false,
       reason: "day",
-      reset: Math.ceil(dayResult.reset / 1000),
+      reset: Math.ceil((oldest + DAY_MS) / 1000),
     };
   }
+
+  timestamps.push(now);
+  hits.set(key, timestamps);
 
   return { ok: true };
 }
