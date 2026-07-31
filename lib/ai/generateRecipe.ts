@@ -1,5 +1,5 @@
 import "server-only";
-import { getOpenAIClient } from "@/lib/ai/openaiConfig";
+import { getModelClient, getModelName } from "@/lib/ai/modelClient";
 import {
   GeneratedRecipeResultSchema,
   type GenerateRecipeInput,
@@ -7,9 +7,6 @@ import {
   type GeneratedRecipeResult,
 } from "@/lib/schema/generatedRecipe";
 import type OpenAI from "openai";
-import { InputTokens } from "openai/resources/responses.mjs";
-
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-5.4-mini";
 
 type GenerateRecipeResult =
   | {
@@ -19,7 +16,7 @@ type GenerateRecipeResult =
     }
   | {
       ok: false;
-      code: "missing_api_key" | "provider_error" | "invalid_model_output";
+      code: "provider_error" | "invalid_model_output";
       message: string;
       attempts: number;
     };
@@ -185,56 +182,47 @@ async function requestModel(
     promptWords,
   });
 
-  const response = await client.responses.create({
-    model: OPENAI_MODEL,
+  // Ollama implementerer /v1/chat/completions, ikke Responses-API-et, så dette
+  // kallet kan ikke bruke client.responses.create.
+  const response = await client.chat.completions.create({
+    model: getModelName(),
     temperature: 0.2,
-    input: [
+    response_format: { type: "json_object" },
+    messages: [
       {
         role: "system",
-        content: [
-          {
-            type: "input_text",
-            text: "Du er en matlagingsassistent. Svar kun med gyldig JSON som følger kravene, og skriv all tekst pa norsk bokmal.",
-          },
-        ],
+        content:
+          "Du er en matlagingsassistent. Svar kun med gyldig JSON som følger kravene, og skriv all tekst på norsk bokmål.",
       },
       {
         role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: prompt,
-          },
-        ],
+        content: prompt,
       },
     ],
-    text: {
-      format: {
-        type: "json_object",
-      },
-    },
   });
-  const inputTokens = response.usage?.input_tokens ?? 0;
-  const outputTokens = response.usage?.output_tokens ?? 0;
-  const totalTokens = response.usage?.total_tokens ?? 0;
-  const inputCost = (inputTokens * 0.75) / 1_000_000;
-  const outputCost = (outputTokens * 4.50) / 1_000_000;
-  const totalCost = inputCost + outputCost;
 
   console.log("[ai.generate.usage]", {
     requestId,
     attempt,
-    inputTokens,
-    outputTokens,
-    totalTokens,
-    totalCost,
+    inputTokens: response.usage?.prompt_tokens ?? 0,
+    outputTokens: response.usage?.completion_tokens ?? 0,
+    totalTokens: response.usage?.total_tokens ?? 0,
   });
 
-  if (!response.output_text) {
-    throw new Error("OpenAI response missing output_text.");
+  const content = response.choices[0]?.message?.content;
+
+  // Resonneringsmodeller (f.eks. qwen3.6) legger tankerekken i et eget
+  // reasoning-felt og kan returnere tomt content hvis de går tom for tokens
+  // før selve svaret. Da er retry riktig oppførsel.
+  if (!content?.trim()) {
+    throw new Error(
+      `Modellen ${getModelName()} returnerte tomt svar (finish_reason: ${
+        response.choices[0]?.finish_reason ?? "ukjent"
+      }).`
+    );
   }
 
-  return response.output_text;
+  return content;
 }
 
 function parseAndValidateRecipe(
@@ -326,16 +314,7 @@ export async function generateRecipeFromAI(
   input: GenerateRecipeInput,
   requestId: string
 ): Promise<GenerateRecipeResult> {
-  const client = getOpenAIClient();
-  if (!client) {
-    return {
-      ok: false,
-      code: "missing_api_key",
-      message: "AI configuration is missing on the server.",
-      attempts: 0,
-    };
-  }
-
+  const client = getModelClient();
   const basePrompt = buildPrompt(input);
   const retryPrompt =
     `${basePrompt}\nForrige svar var ugyldig. Returner gyldig JSON på norsk bokmål uten engelske fraser eller ugyldige enheter. Husk at alle manglende ingredienser må listes i missingIngredients.`;

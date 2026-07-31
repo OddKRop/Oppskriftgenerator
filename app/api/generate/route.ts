@@ -15,6 +15,16 @@ type ServerErrorBody = {
 };
 
 function getClientIp(request: Request): string {
+  // Bak Cloudflare Tunnel er cf-connecting-ip satt av Cloudflare selv og kan
+  // ikke overstyres av klienten. x-forwarded-for kan det: sender klienten sin
+  // egen XFF, legger Cloudflare den ekte IP-en bakerst — så første element er
+  // klientkontrollert, og rate limiten kan omgås med en tilfeldig verdi per
+  // request. Vercel skrev over XFF og skjulte dette.
+  const cfIp = request.headers.get("cf-connecting-ip")?.trim();
+  if (cfIp) {
+    return cfIp;
+  }
+
   const forwardedFor = request.headers.get("x-forwarded-for");
   if (forwardedFor) {
     const firstIp = forwardedFor.split(",")[0]?.trim();
@@ -112,10 +122,7 @@ export async function POST(request: Request) {
     });
 
     const body: ServerErrorBody = {
-      error:
-        result.code === "missing_api_key"
-          ? "Server mangler AI-konfigurasjon."
-          : "Kunne ikke generere oppskrift. Prøv igjen.",
+      error: "Kunne ikke generere oppskrift. Prøv igjen.",
       requestId,
     };
 

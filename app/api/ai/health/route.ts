@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
-import { hasOpenAIApiKey } from "@/lib/ai/openaiConfig";
+import { checkModelAvailability } from "@/lib/ai/modelClient";
 
 export async function GET() {
-  const configured = hasOpenAIApiKey();
+  const status = await checkModelAvailability();
 
-  if (!configured) {
+  if (!status.ok) {
     return NextResponse.json(
       {
         ok: false,
-        message: "OPENAI_API_KEY er ikke konfigurert på serveren.",
+        message: status.message,
       },
       { status: 503 }
     );
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, model: status.model });
 }
