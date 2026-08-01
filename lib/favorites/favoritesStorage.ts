@@ -55,14 +55,65 @@ function writeFavorites(favorites: FavoriteRecipe[]): void {
   }
 
   window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+  invalidate();
+}
+
+/**
+ * localStorage er en ekstern kilde, og React trenger et stabilt øyeblikksbilde
+ * for å lese den trygt. Uten mellomlagring ville hvert kall gitt et nytt array,
+ * og useSyncExternalStore ville rendret i evig løkke.
+ */
+let snapshot: FavoriteRecipe[] | null = null;
+
+// Egen konstant, ikke et nytt tomt array per kall — samme grunn som over.
+const EMPTY: FavoriteRecipe[] = [];
+
+const listeners = new Set<() => void>();
+
+function invalidate(): void {
+  snapshot = null;
+  for (const listener of listeners) {
+    listener();
+  }
 }
 
 export function getFavoriteRecipes(): FavoriteRecipe[] {
-  return readFavorites().sort((a, b) => {
-    const aTime = new Date(a.createdAt).getTime();
-    const bTime = new Date(b.createdAt).getTime();
-    return bTime - aTime;
-  });
+  if (!snapshot) {
+    snapshot = readFavorites().sort((a, b) => {
+      const aTime = new Date(a.createdAt).getTime();
+      const bTime = new Date(b.createdAt).getTime();
+      return bTime - aTime;
+    });
+  }
+
+  return snapshot;
+}
+
+/** Serveren har ingen favoritter. Alltid samme referanse, ellers loop. */
+export function getServerFavoritesSnapshot(): FavoriteRecipe[] {
+  return EMPTY;
+}
+
+/** Varsler også om endringer gjort i en annen fane. */
+export function subscribeToFavorites(listener: () => void): () => void {
+  listeners.add(listener);
+
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === FAVORITES_STORAGE_KEY || event.key === null) {
+      invalidate();
+    }
+  };
+
+  if (isBrowser()) {
+    window.addEventListener("storage", onStorage);
+  }
+
+  return () => {
+    listeners.delete(listener);
+    if (isBrowser()) {
+      window.removeEventListener("storage", onStorage);
+    }
+  };
 }
 
 export function getFavoriteRecipeById(id: string): FavoriteRecipe | null {
