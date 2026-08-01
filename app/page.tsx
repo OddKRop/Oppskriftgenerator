@@ -1,9 +1,10 @@
-'use client'
+"use client";
 
-import Link from "next/link";
-import EmptyState from "@/components/EmptyState";
+import CookMode from "@/components/CookMode";
 import ErrorState from "@/components/ErrorState";
 import LoadingState from "@/components/LoadingState";
+import SectionLabel from "@/components/SectionLabel";
+import TabBar from "@/components/TabBar";
 import {
   getFavoriteRecipeById,
   isRecipeFavorited,
@@ -13,46 +14,90 @@ import {
 import type { GeneratedRecipe } from "@/lib/schema/generatedRecipe";
 import { useEffect, useMemo, useState } from "react";
 
+/**
+ * «Rammer» i designet. Bare tidsrammen finnes som eget API-felt; de øvrige
+ * settes sammen til `preferences`-strengen sammen med fritekstfeltet, siden
+ * modellen leser den som vanlig norsk.
+ */
+const PREFERENCE_CHIPS = [
+  { label: "Uten meieri", preference: "uten meieriprodukter" },
+  { label: "Middag", preference: "middagsrett" },
+  { label: "Barnevennlig", preference: "barnevennlig" },
+] as const;
+
+type View = "input" | "result" | "cook";
+
+function pad(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
 export default function Home() {
+  const [view, setView] = useState<View>("input");
+
+  const [ingredients, setIngredients] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+  const [underForty, setUnderForty] = useState(true);
+  const [activeChips, setActiveChips] = useState<string[]>([]);
+  const [preferencesText, setPreferencesText] = useState("");
+
   const [recipe, setRecipe] = useState<GeneratedRecipe | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [recipeError, setRecipeError] = useState<string | null>(null);
-  const [ingredientsInput, setIngredientsInput] = useState("");
-  const [preferencesInput, setPreferencesInput] = useState("");
-  const [allowLongerTime, setAllowLongerTime] = useState(false);
-  const [isCurrentRecipeFavorited, setIsCurrentRecipeFavorited] = useState(false);
-  const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [assumptions, setAssumptions] = useState<string[]>([]);
+  const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
+  const [recipeError, setRecipeError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const hasRecipe = Boolean(recipe);
+  const [checked, setChecked] = useState<Record<number, boolean>>({});
+  const [cookStep, setCookStep] = useState(0);
+  const [isCurrentRecipeFavorited, setIsCurrentRecipeFavorited] = useState(false);
 
-  const parsedIngredients = useMemo(
-    () =>
-      ingredientsInput
-        .split(/,|\n/)
-        .map((value) => value.trim())
-        .filter(Boolean),
-    [ingredientsInput]
-  );
+  const preferences = useMemo(() => {
+    const fromChips = PREFERENCE_CHIPS.filter((chip) => activeChips.includes(chip.label)).map(
+      (chip) => chip.preference
+    );
+
+    return [...fromChips, preferencesText.trim()].filter(Boolean).join(", ");
+  }, [activeChips, preferencesText]);
+
+  const addIngredient = (value: string) => {
+    const name = value.trim().toLowerCase();
+    if (!name) return;
+    setIngredients((current) => (current.includes(name) ? current : [...current, name]));
+    setDraft("");
+  };
+
+  const removeIngredient = (name: string) => {
+    setIngredients((current) => current.filter((item) => item !== name));
+  };
+
+  const toggleChip = (label: string) => {
+    setActiveChips((current) =>
+      current.includes(label) ? current.filter((item) => item !== label) : [...current, label]
+    );
+  };
 
   const generateRecipe = async () => {
-    if (parsedIngredients.length === 0) {
-      setRecipeError("Legg inn minst en ingrediens.");
+    // Knappen er allerede deaktivert uten ingredienser; dette fanger kall fra
+    // «Gi meg et annet forslag» hvis lista skulle bli tømt i mellomtiden.
+    if (ingredients.length === 0) {
+      setView("input");
       return;
     }
 
     setIsLoading(true);
     setRecipeError(null);
     setClarifyingQuestion(null);
+    setChecked({});
+    setCookStep(0);
+    setView("result");
 
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ingredients: parsedIngredients,
-          preferences: preferencesInput.trim() || undefined,
-          allowLongerTime,
+          ingredients,
+          preferences: preferences || undefined,
+          allowLongerTime: !underForty,
         }),
       });
 
@@ -70,9 +115,12 @@ export default function Home() {
       }
 
       if (typeof data.clarifyingQuestion === "string" && data.clarifyingQuestion.trim().length > 0) {
+        // Brukeren må endre input for å komme videre, så vi sender dem tilbake
+        // dit framfor å vise spørsmålet på en skjerm de ikke kan svare på.
         setRecipe(null);
         setAssumptions([]);
         setClarifyingQuestion(data.clarifyingQuestion);
+        setView("input");
         return;
       }
 
@@ -92,17 +140,8 @@ export default function Home() {
     }
   };
 
-  const resetRecipe = () => {
-    setRecipe(null);
-    setRecipeError(null);
-    setClarifyingQuestion(null);
-    setAssumptions([]);
-  };
-
   const handleCopyMissingIngredients = async () => {
-    if (!recipe || !recipe.missingIngredients || recipe.missingIngredients.length === 0) {
-      return;
-    }
+    if (!recipe || recipe.missingIngredients.length === 0) return;
 
     const lines = recipe.missingIngredients
       .slice(0, 5)
@@ -119,9 +158,7 @@ export default function Home() {
   };
 
   const handleToggleFavorite = () => {
-    if (!recipe) {
-      return;
-    }
+    if (!recipe) return;
 
     if (isRecipeFavorited(recipe.id)) {
       removeFavoriteRecipe(recipe.id);
@@ -142,16 +179,16 @@ export default function Home() {
     setIsCurrentRecipeFavorited(isRecipeFavorited(recipe.id));
   }, [recipe]);
 
+  // Favorittsiden lenker hit med ?favorite=<id>.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const favoriteRecipeId = params.get("favorite");
-    if (!favoriteRecipeId) {
-      return;
-    }
+    if (!favoriteRecipeId) return;
 
     const favorite = getFavoriteRecipeById(favoriteRecipeId);
     if (!favorite) {
       setRecipeError("Fant ikke favorittoppskriften i lokal lagring.");
+      setView("result");
       return;
     }
 
@@ -159,232 +196,352 @@ export default function Home() {
     setRecipeError(null);
     setClarifyingQuestion(null);
     setAssumptions([]);
+    setView("result");
   }, []);
 
+  const hasResult = Boolean(recipe) || isLoading || Boolean(recipeError);
+
   return (
-    <div
-      className={`min-h-screen overflow-x-hidden bg-zinc-950 px-4 py-10 text-zinc-100 ${hasRecipe ? "pb-44 sm:pb-32" : ""}`}
-    >
-      <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-10 shadow-xl shadow-black/30 sm:px-6 md:px-10">
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-bold text-zinc-100 sm:text-3xl">Oppskriftgenerator AI</h1>
-          <Link
-            href="/favorites"
-            className="w-full rounded-md border border-zinc-700 px-3 py-2 text-center text-sm font-medium text-zinc-200 transition hover:bg-zinc-800 sm:w-auto"
-          >
-            Favoritter
-          </Link>
-        </div>
-
-        <div className="space-y-4 rounded-xl border border-zinc-700 bg-zinc-800 p-4">
+    <div className="flex h-dvh flex-col overflow-hidden bg-bg text-text">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        {view === "input" ? (
           <div>
-            <label htmlFor="ingredients" className="mb-2 block text-sm font-medium text-zinc-300">
-              Ingredienser (komma eller ny linje)
-            </label>
-            <textarea
-              id="ingredients"
-              value={ingredientsInput}
-              onChange={(event) => setIngredientsInput(event.target.value)}
-              rows={4}
-              placeholder="kylling, ris, paprika"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100"
-            />
-          </div>
+            <header className="border-b border-line-soft px-6 pt-7 pb-6">
+              <SectionLabel wide>Oppskriftgenerator</SectionLabel>
+              <h1 className="mt-2.5 text-[40px] font-medium leading-[1.02] tracking-[-0.03em]">
+                Middag,
+                <br />
+                av det du
+                <br />
+                <span className="text-accent-2">allerede har</span>
+              </h1>
+            </header>
 
-          <div>
-            <label htmlFor="preferences" className="mb-2 block text-sm font-medium text-zinc-300">
-              Preferanser (valgfritt)
-            </label>
-            <input
-              id="preferences"
-              value={preferencesInput}
-              onChange={(event) => setPreferencesInput(event.target.value)}
-              placeholder="f.eks. uten meieri, sterk mat"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100"
-            />
-          </div>
+            {clarifyingQuestion ? (
+              <div className="px-6 pt-5">
+                <div className="border-l-2 border-accent bg-accent/[0.09] px-3.5 py-3">
+                  <SectionLabel tone="accent">Trenger en avklaring</SectionLabel>
+                  <p className="mt-1.5 text-[15px] text-text">{clarifyingQuestion}</p>
+                  <p className="mt-1.5 text-xs text-muted">
+                    Juster ingrediensene eller rammene, og prøv igjen.
+                  </p>
+                </div>
+              </div>
+            ) : null}
 
-          <label className="flex items-center gap-2 text-sm text-zinc-300">
-            <input
-              type="checkbox"
-              checked={allowLongerTime}
-              onChange={(event) => setAllowLongerTime(event.target.checked)}
-              className="h-4 w-4 rounded border-zinc-600 bg-zinc-900"
-            />
-            Tillat over 40 minutter
-          </label>
-        </div>
+            <div className="px-6 pt-5 pb-6">
+              <SectionLabel>01 · Ingredienser</SectionLabel>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <button
-            onClick={generateRecipe}
-            disabled={isLoading}
-            className="w-full rounded-lg bg-zinc-100 px-5 py-3 font-medium text-zinc-900 transition hover:bg-zinc-300 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-          >
-            Generer oppskrift
-          </button>
-          <button
-            onClick={resetRecipe}
-            disabled={isLoading}
-            className="w-full rounded-lg border border-zinc-700 px-5 py-3 font-medium text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-          >
-            Nullstill
-          </button>
-        </div>
+              <div className="mt-2.5 border-b border-line pb-2">
+                <input
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addIngredient(draft);
+                    }
+                  }}
+                  onBlur={() => addIngredient(draft)}
+                  placeholder="skriv en ingrediens, enter"
+                  aria-label="Legg til ingrediens"
+                  className="w-full bg-transparent py-1 text-[17px] text-text outline-none placeholder:text-faint"
+                />
+              </div>
 
-        <section className="w-full rounded-xl border border-zinc-700 bg-zinc-800 p-6 text-zinc-100">
-          {isLoading ? (
-            <LoadingState text="Genererer..." />
-          ) : recipeError ? (
-            <ErrorState title="Generering feilet" message={recipeError} onRetry={generateRecipe} />
-          ) : clarifyingQuestion ? (
-            <div className="rounded-lg border border-amber-800 bg-amber-950/30 p-4 text-amber-100">
-              <h2 className="text-lg font-semibold">Avklaringsspørsmål fra AI</h2>
-              <p className="mt-1 text-sm">{clarifyingQuestion}</p>
-              <p className="mt-3 text-sm text-amber-200">
-                Oppdater ingredienser eller preferanser over, og trykk Generer oppskrift igjen.
-              </p>
+              <ul className="mt-3">
+                {ingredients.map((name, index) => (
+                  <li key={name}>
+                    <button
+                      type="button"
+                      onClick={() => removeIngredient(name)}
+                      className="flex w-full items-baseline gap-2.5 border-b border-hairline py-3 text-left transition-colors hover:text-accent-1"
+                    >
+                      <span className="w-[18px] font-mono text-[10px] font-medium text-faint">
+                        {pad(index + 1)}
+                      </span>
+                      <span className="text-base">{name}</span>
+                      <span className="ml-auto text-xs text-dim">fjern</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <SectionLabel className="mt-6">02 · Rammer</SectionLabel>
+              <div className="mt-2.5 flex flex-wrap gap-[7px]">
+                <button
+                  type="button"
+                  onClick={() => setUnderForty((value) => !value)}
+                  aria-pressed={underForty}
+                  className={`min-h-11 rounded-md border px-3 py-2 text-[13px] font-medium transition-colors ${
+                    underForty
+                      ? "border-accent bg-accent/[0.14] text-accent-1"
+                      : "border-line text-muted hover:border-accent-dk"
+                  }`}
+                >
+                  Under 40 min
+                </button>
+
+                {PREFERENCE_CHIPS.map((chip) => {
+                  const isOn = activeChips.includes(chip.label);
+                  return (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => toggleChip(chip.label)}
+                      aria-pressed={isOn}
+                      className={`min-h-11 rounded-md border px-3 py-2 text-[13px] font-medium transition-colors ${
+                        isOn
+                          ? "border-accent bg-accent/[0.14] text-accent-1"
+                          : "border-line text-muted hover:border-accent-dk"
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <input
+                value={preferencesText}
+                onChange={(event) => setPreferencesText(event.target.value)}
+                placeholder="noe annet? f.eks. uten sopp"
+                aria-label="Andre preferanser"
+                className="mt-3 min-h-11 w-full rounded-md border border-line bg-surface px-3 py-2.5 text-sm text-text outline-none placeholder:text-faint"
+              />
             </div>
-          ) : !recipe ? (
-            <EmptyState
-              title="Ingen oppskrift enda"
-              description="Legg inn ingredienser og trykk Generer oppskrift."
-              ctaLabel="Generer nå"
-              onAction={generateRecipe}
-            />
-          ) : (
-            <div className="space-y-5">
-              <div>
-                <div className="flex items-start justify-between gap-3">
-                  <h2 className="text-3xl font-semibold leading-tight md:text-4xl">{recipe.title}</h2>
-                  <button
-                    type="button"
-                    onClick={handleToggleFavorite}
-                    aria-pressed={isCurrentRecipeFavorited}
-                    className="hidden rounded-md border border-zinc-600 px-3 py-1 text-sm font-medium text-zinc-100 transition hover:bg-zinc-700 md:inline-flex"
-                  >
-                    {isCurrentRecipeFavorited ? "★ Favoritt" : "☆ Legg til favoritt"}
-                  </button>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-4 text-sm text-zinc-400">
-                  {typeof recipe.servings === "number" ? <span>Porsjoner: {recipe.servings}</span> : null}
-                  {typeof recipe.timeMinutes === "number" ? <span>Tid: {recipe.timeMinutes} min</span> : null}
+
+            <div className="px-6 pb-8">
+              <button
+                type="button"
+                onClick={generateRecipe}
+                disabled={isLoading || ingredients.length === 0}
+                className="flex w-full items-center justify-between rounded-lg border border-accent px-4 py-4 text-base font-medium text-accent-1 transition-colors hover:bg-accent/[0.12] disabled:border-line disabled:text-faint disabled:hover:bg-transparent"
+              >
+                <span>
+                  {ingredients.length === 0 ? "Legg inn minst én ingrediens" : "Lag en oppskrift"}
+                </span>
+                <span aria-hidden className="text-lg text-accent">
+                  →
+                </span>
+              </button>
+              <p className="mt-2.5 text-center text-[11px] text-faint">Kjører lokalt på din maskin</p>
+            </div>
+          </div>
+        ) : null}
+
+        {view === "result" ? (
+          isLoading ? (
+            <LoadingState />
+          ) : recipeError ? (
+            <div className="px-6 pt-6">
+              <ErrorState title="Generering feilet" message={recipeError} onRetry={generateRecipe} />
+            </div>
+          ) : recipe ? (
+            <div>
+              <div className="relative overflow-hidden bg-section px-6 pt-7 pb-6">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -right-16 -top-[70px] h-[210px] w-[210px] rounded-full opacity-75"
+                  style={{ background: "radial-gradient(circle, #4c5397 0%, transparent 70%)" }}
+                />
+                <div className="relative">
+                  <div className="flex items-start justify-between gap-3">
+                    <SectionLabel wide tone="onSection">
+                      Forslag
+                    </SectionLabel>
+                    <button
+                      type="button"
+                      onClick={handleToggleFavorite}
+                      aria-pressed={isCurrentRecipeFavorited}
+                      aria-label={
+                        isCurrentRecipeFavorited ? "Fjern fra favoritter" : "Lagre som favoritt"
+                      }
+                      className="-mt-2 -mr-1 px-2 py-1 text-lg text-on-section transition-opacity hover:opacity-80"
+                    >
+                      {isCurrentRecipeFavorited ? "★" : "☆"}
+                    </button>
+                  </div>
+
+                  <h2 className="mt-3 text-[34px] font-medium leading-[1.06] tracking-[-0.03em] text-on-section">
+                    {recipe.title}
+                  </h2>
+
+                  <div className="mt-4 flex gap-6">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.1em] text-on-section-muted">
+                        Tid
+                      </div>
+                      <div className="text-lg font-medium text-on-section">
+                        {recipe.timeMinutes} min
+                      </div>
+                    </div>
+                    {typeof recipe.servings === "number" ? (
+                      <div>
+                        <div className="text-[10px] uppercase tracking-[0.1em] text-on-section-muted">
+                          Porsjoner
+                        </div>
+                        <div className="text-lg font-medium text-on-section">{recipe.servings}</div>
+                      </div>
+                    ) : null}
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.1em] text-on-section-muted">
+                        Mangler
+                      </div>
+                      <div className="text-lg font-medium text-on-section">
+                        {recipe.missingIngredients.length}
+                      </div>
+                    </div>
+                  </div>
+
+                  {assumptions.length > 0 ? (
+                    <p className="relative mt-3 text-[13px] leading-[1.5] text-on-section-muted">
+                      {assumptions.join(" · ")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
-              {assumptions.length > 0 ? (
-                <div>
-                  <h3 className="mb-2 text-lg font-semibold">Antakelser</h3>
-                  <ul className="list-disc space-y-1 pl-5 text-zinc-300">
-                    {assumptions.map((assumption, index) => (
-                      <li key={`${index}-${assumption}`}>{assumption}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <div>
-                <h3 className="mb-2 text-lg font-semibold">Ingredienser</h3>
-                <ul className="space-y-2">
-                  {recipe.ingredients.map((ingredient, index) => (
-                    <li
-                      key={`${ingredient.item}-${index}`}
-                      className="flex items-start gap-3 rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2"
-                    >
-                      <span className="mt-1 h-4 w-4 rounded-sm border border-zinc-500" aria-hidden />
-                      <span className="text-zinc-100">
-                        {ingredient.item}
-                        {ingredient.quantity ? ` (${ingredient.quantity})` : ""}
-                      </span>
-                    </li>
-                  ))}
+              <div className="px-6 pt-5 pb-5">
+                <SectionLabel>Ingredienser</SectionLabel>
+                <ul className="mt-2.5">
+                  {recipe.ingredients.map((ingredient, index) => {
+                    const isChecked = Boolean(checked[index]);
+                    return (
+                      <li key={`${ingredient.item}-${index}`}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setChecked((current) => ({ ...current, [index]: !current[index] }))
+                          }
+                          aria-pressed={isChecked}
+                          className="flex w-full items-baseline gap-2.5 border-b border-hairline py-3 text-left"
+                        >
+                          <span
+                            aria-hidden
+                            className={`font-mono text-[11px] font-medium ${
+                              isChecked ? "text-accent-2" : "text-dim"
+                            }`}
+                          >
+                            {isChecked ? "●" : "○"}
+                          </span>
+                          <span
+                            className={`text-base ${
+                              isChecked ? "text-faint line-through" : "text-text"
+                            }`}
+                          >
+                            {ingredient.item}
+                          </span>
+                          {ingredient.quantity ? (
+                            <span className="ml-auto pl-3 font-mono text-[13px] text-faint">
+                              {ingredient.quantity}
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
-              </div>
 
-              <div>
-                <h3 className="mb-2 text-lg font-semibold">Fremgangsmåte</h3>
-                <ol className="space-y-3">
-                  {recipe.steps.map((step, index) => (
-                    <li
-                      key={`${index}-${step}`}
-                      className="flex items-start gap-3 rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-3"
-                    >
-                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-900">
-                        {index + 1}
-                      </span>
-                      <span>{step}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              <div>
-                <div className="mb-2 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className="text-lg font-semibold">Manglende ingredienser (må kjøpes)</h3>
-                  {recipe.missingIngredients.length > 0 ? (
+                {recipe.missingIngredients.length > 0 ? (
+                  <div className="mt-3.5 flex items-center gap-2.5 border-l-2 border-accent bg-accent/[0.09] px-3.5 py-3">
+                    <div>
+                      <div className="text-xs text-muted">Du mangler</div>
+                      <div className="text-[15px] font-medium text-text">
+                        {recipe.missingIngredients.map((item) => item.item).join(", ")}
+                      </div>
+                    </div>
                     <button
                       type="button"
                       onClick={handleCopyMissingIngredients}
-                      className="w-full rounded-md border border-zinc-600 px-3 py-1 text-sm font-medium text-zinc-100 transition hover:bg-zinc-700 sm:w-auto"
+                      className="ml-auto shrink-0 px-2 py-2 text-xs font-medium text-accent-2 transition-colors hover:text-accent-1"
                     >
-                      Kopier handleliste
+                      Kopier ›
                     </button>
-                  ) : null}
-                </div>
-                {recipe.missingIngredients.length > 0 ? (
-                  <ul className="list-disc space-y-1 pl-5 text-zinc-300">
-                    {recipe.missingIngredients.slice(0, 5).map((item, index) => (
-                      <li key={`${item.item}-${index}`}>
-                        {item.item}
-                        {item.reason ? ` - ${item.reason}` : ""}
-                      </li>
-                    ))}
-                  </ul>
+                  </div>
                 ) : (
-                  <p className="text-sm text-emerald-400">
-                    Du kan lage denne med det du har ✅
+                  <p className="mt-3.5 text-[13px] text-muted">
+                    Du kan lage denne med det du allerede har.
                   </p>
                 )}
               </div>
 
-              {recipe.notes && recipe.notes.length > 0 ? (
-                <div>
-                  <h3 className="mb-2 text-lg font-semibold">Notater</h3>
-                  <ul className="list-disc space-y-1 pl-5 text-zinc-300">
-                    {recipe.notes.map((note, index) => (
-                      <li key={`${index}-${note}`}>{note}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          )}
-        </section>
-      </main>
+              <div className="px-6 pb-7">
+                <SectionLabel>Fremgangsmåte</SectionLabel>
+                <ol className="mt-1.5">
+                  {recipe.steps.map((step, index) => (
+                    <li
+                      key={`${index}-${step}`}
+                      className="flex gap-3.5 border-b border-hairline py-3.5"
+                    >
+                      <span className="w-[30px] shrink-0 text-[22px] font-medium leading-none tracking-[-0.02em] text-step-num">
+                        {pad(index + 1)}
+                      </span>
+                      <span className="text-[15px] leading-[1.55] text-pretty text-body">{step}</span>
+                    </li>
+                  ))}
+                </ol>
 
-      {hasRecipe ? (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-zinc-700 bg-zinc-950/95 p-3 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={generateRecipe}
-              disabled={isLoading}
-              className="flex-1 rounded-lg bg-zinc-100 px-4 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-300 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Generer ny
-            </button>
-            <button
-              type="button"
-              onClick={handleToggleFavorite}
-              aria-pressed={isCurrentRecipeFavorited}
-              disabled={isLoading}
-              className="flex-1 rounded-lg border border-zinc-600 px-4 py-3 text-sm font-semibold text-zinc-100 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isCurrentRecipeFavorited ? "★ Favoritt" : "☆ Favoritt"}
-            </button>
-          </div>
-        </div>
-      ) : null}
+                {recipe.notes && recipe.notes.length > 0 ? (
+                  <div className="mt-5">
+                    <SectionLabel>Notater</SectionLabel>
+                    <ul className="mt-2 space-y-1.5">
+                      {recipe.notes.map((note, index) => (
+                        <li key={`${index}-${note}`} className="text-[14px] leading-[1.5] text-muted">
+                          {note}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCookStep(0);
+                    setView("cook");
+                  }}
+                  className="mt-5 w-full rounded-lg border border-accent px-4 py-3.5 text-[15px] font-medium text-accent-1 transition-colors hover:bg-accent/[0.12]"
+                >
+                  Start kokemodus
+                </button>
+                <button
+                  type="button"
+                  onClick={generateRecipe}
+                  className="mt-2.5 w-full py-2 text-center text-[13px] text-faint transition-colors hover:text-muted"
+                >
+                  Gi meg et annet forslag
+                </button>
+              </div>
+            </div>
+          ) : null
+        ) : null}
+
+        {view === "cook" && recipe ? (
+          <CookMode
+            recipe={recipe}
+            stepIndex={cookStep}
+            onPrev={() => setCookStep((step) => Math.max(0, step - 1))}
+            onNext={() => {
+              // Bytte av visning må skje her og ikke inne i setCookStep —
+              // oppdateringsfunksjoner skal være rene.
+              if (cookStep >= recipe.steps.length - 1) {
+                setView("result");
+                return;
+              }
+              setCookStep((step) => step + 1);
+            }}
+            onExit={() => setView("result")}
+          />
+        ) : null}
+      </div>
+
+      <TabBar
+        active={view === "input" ? "input" : "result"}
+        onSelectInput={() => setView("input")}
+        onSelectResult={() => setView("result")}
+        resultEnabled={hasResult}
+      />
     </div>
   );
 }

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { preferredSpelling, userProvidedIngredient } from "./ingredientMatching.ts";
+import {
+  ingredientsMentionedIn,
+  preferredSpelling,
+  userProvidedIngredient,
+} from "./ingredientMatching.ts";
 
 // Ingrediensen fra oppskriften er dekket av det brukeren oppga.
 const DEKKET: Array<[string, string[], string]> = [
@@ -64,6 +68,28 @@ test("bruker brukerens stavemåte kun ved skrivefeil", () => {
       preferredSpelling(item, userIngredients),
       expected,
       `«${item}» mot [${userIngredients.join(", ")}] — ${why}`
+    );
+  }
+});
+
+const OPPSKRIFT = ["kyllingfilet", "ris", "paprika", "løk", "hvitløk", "matfløte"];
+
+// [stegtekst, forventede ingredienser, hvorfor]
+const STEG: Array<[string, string[], string]> = [
+  ["Skjær kyllingen i biter og brun den i olje.", [], "«kyllingen» dekker ikke «kyllingfilet»"],
+  ["Tilsett hakket løk og paprika.", ["paprika", "løk"], "bøyning og kvalifikator"],
+  ["Press i hvitløken og hell over matfløten.", ["hvitløk", "matfløte"], "bestemt form"],
+  ["Kok risen etter anvisningen på pakken.", ["ris"], "bestemt form av kort ord"],
+  ["Smak til med salt og pepper.", [], "nevner ingenting fra lista"],
+  ["", [], "tom tekst"],
+];
+
+test("finner ingrediensene som nevnes i et steg", () => {
+  for (const [text, expected, why] of STEG) {
+    assert.deepEqual(
+      ingredientsMentionedIn(text, OPPSKRIFT).sort(),
+      [...expected].sort(),
+      `«${text}» — ${why}`
     );
   }
 });

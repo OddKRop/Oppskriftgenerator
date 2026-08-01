@@ -1,3 +1,5 @@
+import SectionLabel from "./SectionLabel";
+
 type ErrorStateProps = {
   title?: string;
   message: string;
@@ -5,6 +7,10 @@ type ErrorStateProps = {
   retryLabel?: string;
 };
 
+/**
+ * Rød ramme på transparent, ikke fylt flate — specen tillater ingen store
+ * mettede farger utenfor hero-båndet.
+ */
 export default function ErrorState({
   title = "Noe gikk galt",
   message,
@@ -12,13 +18,14 @@ export default function ErrorState({
   retryLabel = "Prøv igjen",
 }: ErrorStateProps) {
   return (
-    <div className="rounded-lg border border-red-900 bg-red-950/40 p-4 text-red-100">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-red-200">{message}</p>
+    <div role="alert" className="rounded-lg border border-danger-line px-4 py-4">
+      <SectionLabel className="text-danger">{title}</SectionLabel>
+      <p className="mt-2 text-[15px] text-text">{message}</p>
       {onRetry ? (
         <button
+          type="button"
           onClick={onRetry}
-          className="mt-4 rounded-md bg-red-200 px-4 py-2 text-sm font-medium text-red-950 hover:bg-red-100"
+          className="mt-3.5 rounded-lg border border-danger-line px-3.5 py-2.5 text-sm font-medium text-danger transition-colors hover:bg-white/5"
         >
           {retryLabel}
         </button>

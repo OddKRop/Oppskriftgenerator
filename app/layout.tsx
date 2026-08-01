@@ -1,14 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -18,7 +13,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     // Etiketten under ikonet på hjem-skjermen. iOS kutter etter rundt tolv
     // tegn, så det fulle navnet ble «Oppskriftge…». Samme ord som manifestets
     // short_name.
@@ -33,11 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="nb">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+      <body className={`${inter.variable} bg-bg text-text antialiased`}>{children}</body>
     </html>
   );
 }

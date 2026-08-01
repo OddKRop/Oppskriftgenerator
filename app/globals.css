@@ -1,26 +1,78 @@
 @import "tailwindcss";
 
+/* Tokens fra designspecen. Appen er mørk-bare — den var det i praksis fra før,
+   med hardkodet zinc-950, så prefers-color-scheme er fjernet framfor å late som
+   det finnes et lyst tema. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+
+  --bg: #161826;
+  --surface: #232532;
+  --line: #3f424d;
+  --line-soft: rgba(233, 233, 237, 0.12);
+  --hairline: rgba(233, 233, 237, 0.08);
+
+  --text: #e9e9ed;
+  --body: #cfd3e5;
+  --muted: #9397ab;
+  --faint: #75798c;
+  --dim: #595d6c;
+
+  --accent: #9184d9;
+  --accent-1: #d2cefd;
+  --accent-2: #b5abfc;
+  --accent-dk: #5d5294;
+  --accent-bg: #2b2741;
+
+  /* Eneste store fargeflate i designet: hero-båndet på resultatskjermen. */
+  --section: #262a60;
+  --on-section: #f3f5fe;
+  --on-section-muted: #b5afe8;
+  --step-num: #423a6a;
+
+  --danger: #f2a0a0;
+  --danger-line: #7a3b3b;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-hairline: var(--hairline);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-text: var(--text);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-dim: var(--dim);
+
+  --color-accent: var(--accent);
+  --color-accent-1: var(--accent-1);
+  --color-accent-2: var(--accent-2);
+  --color-accent-dk: var(--accent-dk);
+  --color-accent-bg: var(--accent-bg);
+
+  --color-section: var(--section);
+  --color-on-section: var(--on-section);
+  --color-on-section-muted: var(--on-section-muted);
+  --color-step-num: var(--step-num);
+
+  --color-danger: var(--danger);
+  --color-danger-line: var(--danger-line);
+
+  --font-sans: var(--font-inter);
+  --font-mono: ui-monospace, Menlo, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+/* Specen krever synlig fokus overalt. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

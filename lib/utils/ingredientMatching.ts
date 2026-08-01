@@ -220,6 +220,75 @@ export function preferredSpelling(recipeItem: string, userIngredients: string[])
   return userWord;
 }
 
+// Maks antall tegn et ord i steget kan ha utover ingrediensen for å regnes som
+// samme vare. To–tre tegn dekker norske endelser uten å nå andre ord.
+const MAX_INFLECTION_TAIL = 3;
+const MIN_PREFIX_LENGTH = 3;
+
+/**
+ * «risen» inneholder «ris», men stammen er for kort til at endelsen strippes,
+ * og avstanden er to tegn. Prefiks-regelen fanger den uten å løsne på
+ * matchingen ellers — og siden norske endelser henger bakpå, treffer den ikke
+ * «løk» inni «hvitløken», som en ren substring-sjekk ville gjort.
+ *
+ * Brukes kun til visning i kokemodus. Den er for løs til å avgjøre hva
+ * brukeren mangler.
+ */
+function hasInflectedPrefix(stepToken: string, itemToken: string): boolean {
+  return (
+    itemToken.length >= MIN_PREFIX_LENGTH &&
+    stepToken.startsWith(itemToken) &&
+    stepToken.length - itemToken.length <= MAX_INFLECTION_TAIL
+  );
+}
+
+/**
+ * Hvilke av oppskriftens ingredienser som nevnes i en steg-tekst.
+ *
+ * Kokemodus viser «du trenger nå» per steg, men datamodellen kobler ikke steg
+ * til ingredienser. I stedet leter vi opp igjen ingrediensnavnene i teksten.
+ * Stemmingen gjør at «hvitløken» i steget treffer «hvitløk» i lista.
+ *
+ * Bevisst upresist: finner den ingenting, returneres tom liste og linja skjules
+ * heller enn å gjette. Et steg som «kok risen etter anvisningen» treffer «ris»,
+ * mens «smak til» ikke treffer noe — og det er riktig.
+ */
+export function ingredientsMentionedIn(
+  stepText: string,
+  ingredientItems: string[]
+): string[] {
+  const stepTokens = tokenize(stepText);
+
+  if (stepTokens.length === 0) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const mentioned: string[] = [];
+
+  for (const item of ingredientItems) {
+    const itemTokens = tokenize(item);
+    if (itemTokens.length === 0) {
+      continue;
+    }
+
+    const allPresent = itemTokens.every((token) =>
+      stepTokens.some(
+        (candidate) =>
+          candidate === token || isTypoOf(candidate, token) || hasInflectedPrefix(candidate, token)
+      )
+    );
+
+    const key = normalizeIngredient(item);
+    if (allPresent && !seen.has(key)) {
+      seen.add(key);
+      mentioned.push(item);
+    }
+  }
+
+  return mentioned;
+}
+
 // Endelser som gjør et ord til en bøyningsform av det andre.
 const INFLECTION_ENDINGS = ["r", "er", "e", "en", "et", "a", "ne", "ene", "ane"];
 
