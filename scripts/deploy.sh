@@ -7,9 +7,11 @@
 # er derimot allerede noe som skjer her, med Ollama tilgjengelig — så det er
 # her porten hører hjemme.
 #
-#   ./scripts/deploy.sh              full sjekk, deretter rebuild
-#   ./scripts/deploy.sh --skip-eval  hopp over modellkjøringen
-#   ./scripts/deploy.sh --check      kjør sjekkene, ikke deploy
+#   ./scripts/deploy.sh                  full sjekk, deretter rebuild
+#   ./scripts/deploy.sh --skip-eval      hopp over modellkjøringen
+#   ./scripts/deploy.sh --check          kjør sjekkene, ikke deploy
+#   ./scripts/deploy.sh --force-recreate start containeren på nytt selv om
+#                                        imaget er uendret
 
 set -euo pipefail
 
@@ -17,11 +19,16 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 SKIP_EVAL=0
 CHECK_ONLY=0
+COMPOSE_ARGS=(up -d --build)
 
 for arg in "$@"; do
   case "$arg" in
     --skip-eval) SKIP_EVAL=1 ;;
     --check) CHECK_ONLY=1 ;;
+    # Er imaget uendret, lar compose containeren stå. Da testes verken
+    # oppstarten eller etterkontrollen, som er nettopp det man vil se når man
+    # har rørt selve deploy-veien.
+    --force-recreate) COMPOSE_ARGS+=(--force-recreate) ;;
     # Skriver ut kommentarblokken øverst, uten å være avhengig av linjenumre.
     -h|--help)
       awk 'NR>2 && /^#/ { sub(/^# ?/, ""); print; next } NR>2 { exit }' "${BASH_SOURCE[0]}"
@@ -80,7 +87,7 @@ fi
 
 # ── Deploy ──────────────────────────────────────────────────────────────────
 step "Bygger og starter container"
-docker compose up -d --build
+docker compose "${COMPOSE_ARGS[@]}"
 
 # ── Etterkontroll ───────────────────────────────────────────────────────────
 step "Verifiserer at appen svarer"
