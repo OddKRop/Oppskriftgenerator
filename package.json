@@ -6,7 +6,8 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "eval": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./evals/register.mjs evals/run.ts"
   },
   "dependencies": {
     "next": "16.1.1",

@@ -11,6 +11,9 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // evals/ kjøres direkte av Node, som krever filending i relative importer.
+    // Trygt sammen med noEmit: ingenting kompileres, så endelsene forblir gyldige.
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
