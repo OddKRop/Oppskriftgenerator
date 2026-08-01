@@ -58,17 +58,34 @@ This layer ensures that only valid and allowed requests are passed to the recipe
 
 ### LLM Layer (`generateRecipe.ts`)
 
-The LLM layer handles prompt construction and interaction with the OpenAI API.
+The LLM layer handles prompt construction and interaction with the model.
 
 Main responsibilities:
 
 - build the system prompt
 - build the user prompt
-- send the request to the OpenAI API
+- send the request to the model endpoint
 - check whether the response matches the expected structure, format, and language
 - retry generation if the first result is invalid
 
 This layer is the core AI generation component of the application.
+
+### Model Client (`modelClient.ts`)
+
+Generation runs against [Ollama](https://ollama.com) on the host rather than a
+cloud provider. The `openai` client is kept and pointed at Ollama's
+OpenAI-compatible endpoint, so the calling code is unchanged, but requests use
+`client.chat.completions.create()` — Ollama implements `/v1/chat/completions`
+and not the Responses API.
+
+The endpoint and model come from `AI_BASE_URL` and `AI_MODEL`, both with
+defaults, so the application runs unconfigured on a machine with Ollama
+installed. Running locally means generation has no per-request cost and no user
+input leaves the machine.
+
+`checkModelAvailability()` backs the `/api/ai/health` route, which reports both
+whether the endpoint answers and whether the configured model is pulled. That
+distinction separates a model problem from an application problem.
 
 ---
 
@@ -101,14 +118,18 @@ Currently implemented:
 
 - rate limiter logging
 - console logging for errors
+- token usage per attempt (`[ai.generate.usage]`)
+- request latency and attempt count on success and failure
+- prompt size per attempt
+
+The eval harness reads these same logs, so retry rate and latency can be
+measured across a fixed set of inputs rather than only observed in production.
+See `evaluation.md`.
 
 Future improvements may include:
 
-- token usage tracking
-- request latency tracking
-- cost monitoring
-- structured error logging
-- retry metrics
+- structured error logging rather than console output
+- persisting metrics instead of discarding them with the container
 
 ---
 
@@ -134,7 +155,7 @@ API Route (route.ts)
 LLM Layer (generateRecipe.ts)
   -> builds system prompt
   -> builds user prompt
-  -> sends request to OpenAI API
+  -> sends request to Ollama on the host
   -> receives response
 
 Validation Layer
@@ -167,7 +188,8 @@ Typical failure scenarios include:
 - The returned JSON does not match the Zod schema
 - The user sends invalid input
 - The API rate limit is exceeded
-- The OpenAI API request fails
+- Ollama is not running, or the configured model is not pulled
+- The model returns an empty response before producing an answer
 - The generated output does not meet formatting or language requirements
 
 ---
@@ -218,7 +240,7 @@ RateLimit[Rate Limiter]
 
 LLM[LLM Layer<br/>generateRecipe.ts]
 
-OpenAI[OpenAI API]
+Ollama[Ollama on host<br/>gemma4:e4b]
 
 Validation[Zod Validation]
 
@@ -232,8 +254,8 @@ UI --> API
 API --> RateLimit
 RateLimit --> LLM
 
-LLM --> OpenAI
-OpenAI --> Validation
+LLM --> Ollama
+Ollama --> Validation
 
 Validation -->|Valid| Response
 Response --> UI

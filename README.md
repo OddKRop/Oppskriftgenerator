@@ -23,7 +23,8 @@ The goal of the project is both to build a useful tool and to explore how to des
 - **Frontend:** Next.js
 - **Backend:** Next.js API routes
 - **Language:** TypeScript
-- **LLM Provider:** OpenAI Responses API
+- **LLM Provider:** Ollama running on the host, called through its OpenAI-compatible endpoint
+- **Model:** `gemma4:e4b`
 - **Validation:** Zod
 - **Runtime:** Node.js
 
@@ -31,34 +32,37 @@ The goal of the project is both to build a useful tool and to explore how to des
 
 # Project Structure
 
-/app
-page.tsx
+```text
+app/
+  page.tsx                        UI for entering ingredients
+  favorites/page.tsx              saved recipes
+  api/generate/route.ts           main endpoint
+  api/ai/health/route.ts          checks that the model is reachable
 
-/api
-recipe/route.ts
+lib/
+  ai/generateRecipe.ts            prompt, retry and output validation
+  ai/modelClient.ts               points the OpenAI client at Ollama
+  schema/generatedRecipe.ts       Zod schemas for input and output
+  security/ratelimit.ts           in-memory rate limiting
+  utils/ingredientMatching.ts     matches recipe items against the user's list
 
-/lib
-ai/generateRecipe.ts
-
-/schema
-recipeSchema.ts
-
-/docs
-architecture.md
-prompting.md
-evaluation.md
-
+evals/                            eval harness, see docs/evaluation.md
+docs/
+  architecture.md                 system architecture and data flow
+  prompting.md                    prompt design and LLM interaction strategy
+  evaluation.md                   evaluation strategy and the eval harness
+```
 
 ### Key Components
 
-**Frontend (page.tsx)**  
+**Frontend (`app/page.tsx`)**  
 Handles user input and displays the generated recipe.
 
-**API Route (route.ts)**  
+**API Route (`app/api/generate/route.ts`)**  
 Receives requests from the UI, validates input, applies rate limiting, and forwards the request to the AI generation layer.
 
-**LLM Layer (generateRecipe.ts)**  
-Builds prompts and sends requests through `client.responses.create()` to generate structured recipes.
+**LLM Layer (`lib/ai/generateRecipe.ts`)**  
+Builds prompts and sends requests through `client.chat.completions.create()` to generate structured recipes.
 
 **Validation Layer**  
 Uses Zod schemas to validate both input and LLM output.
@@ -66,6 +70,15 @@ Uses Zod schemas to validate both input and LLM output.
 ---
 
 # Getting Started
+
+## Prerequisites
+
+The application talks to a local [Ollama](https://ollama.com) instance, so no
+API key and no cloud provider is involved. Pull the model first:
+
+```bash
+ollama pull gemma4:e4b
+```
 
 ## Install dependencies
 
@@ -81,11 +94,31 @@ npm run dev
 
 http://localhost:3000
 
+`GET /api/ai/health` reports whether the model endpoint answers and the
+configured model is actually pulled — the quickest way to tell a model problem
+apart from an application problem.
+
 ## Environment Variables
 
-Create a .env.local file and add:
+Both have sensible defaults in `lib/ai/modelClient.ts`, so a local setup needs
+no configuration at all. Set them only to override:
 
-OPENAI_API_KEY=your_api_key_here
+```bash
+AI_BASE_URL=http://127.0.0.1:11434/v1   # Ollama's OpenAI-compatible endpoint
+AI_MODEL=gemma4:e4b
+```
+
+`AI_API_KEY` exists for the case where the endpoint is swapped for one that
+actually authenticates. Ollama needs no key.
+
+## Tests
+
+```bash
+npm test        # unit tests (node:test)
+npm run eval    # runs fixed inputs against the model, see docs/evaluation.md
+```
+
+The eval harness needs Ollama running and the model pulled.
 
 ## Error Handling
 
@@ -96,13 +129,22 @@ The system includes multiple layers of protection:
 - Automatic retry if the model returns invalid data
 - Error responses if generation fails
 
-## OpenAI Integration
+## Model Integration
 
-- All recipe generation calls use the OpenAI Responses API
-- The backend parses model output from `response.output_text`
-- JSON output is still validated with Zod before it reaches the UI
+- Generation runs against a local Ollama instance, not a cloud provider
+- The `openai` client is kept and pointed at Ollama's OpenAI-compatible endpoint
+- Calls use `client.chat.completions.create()`; Ollama implements
+  `/v1/chat/completions` but not the Responses API
+- Output is read from `response.choices[0].message.content` and validated with
+  Zod before it reaches the UI
 
-These safeguards help ensure that the application returns reliable structured data.
+Because the model runs locally, generation has no per-request cost, and the
+ingredients a user types never leave the machine.
+
+Reasoning models are worth a note: some return their chain of thought in a
+separate field and can leave `content` empty if they run out of tokens before
+answering. The LLM layer treats an empty response as a failed attempt and
+retries.
 
 ---
 
@@ -132,11 +174,10 @@ Additional documentation is available in the `/docs` directory.
 
 Planned improvements include:
 
-- Token usage and cost monitoring
 - Improved logging and observability
 - Retrieval-Augmented Generation (RAG) for recipe knowledge
 - Prompt versioning
-- Automated evaluation of generated recipes
+- Running the eval harness automatically rather than by hand
 
 ---
 
