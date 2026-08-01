@@ -1,5 +1,5 @@
 import type { GeneratedRecipe } from "@/lib/schema/generatedRecipe";
-import { userProvidedIngredient } from "@/lib/utils/ingredientMatching";
+import { preferredSpelling, userProvidedIngredient } from "@/lib/utils/ingredientMatching";
 
 export type Outcome =
   | { kind: "recipe"; recipe: GeneratedRecipe; assumptions: string[] }
@@ -124,6 +124,28 @@ export function usesAtLeast(count: number): Assertion {
     return matched.length < count
       ? `brukte ${matched.length} av brukerens ${context.ingredients.length} ingredienser, kravet er minst ${count}`
       : null;
+  };
+}
+
+/**
+ * Regresjonsvakt for applyUserSpelling: ingen ingrediens skal stå igjen med en
+ * stavemåte som er en skrivefeil av det brukeren oppga. Produksjonskoden retter
+ * dem, så dette skal alltid holde — slår det ut, er det appen som har røket.
+ */
+export function usesUserSpelling(): Assertion {
+  return (outcome, context) => {
+    if (outcome.kind !== "recipe") {
+      return null;
+    }
+
+    for (const ingredient of outcome.recipe.ingredients) {
+      const corrected = preferredSpelling(ingredient.item, context.ingredients);
+      if (corrected !== ingredient.item) {
+        return `«${ingredient.item}» skulle vært rettet til «${corrected}»`;
+      }
+    }
+
+    return null;
   };
 }
 

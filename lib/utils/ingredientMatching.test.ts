@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { userProvidedIngredient } from "./ingredientMatching.ts";
+import { preferredSpelling, userProvidedIngredient } from "./ingredientMatching.ts";
 
 // Ingrediensen fra oppskriften er dekket av det brukeren oppga.
 const DEKKET: Array<[string, string[], string]> = [
@@ -41,6 +41,28 @@ test("regner ingrediensen som manglende", () => {
     assert.equal(
       userProvidedIngredient(item, userIngredients),
       false,
+      `«${item}» mot [${userIngredients.join(", ")}] — ${why}`
+    );
+  }
+});
+
+// [modellens ord, brukerens liste, forventet resultat, hvorfor]
+const STAVEMÅTE: Array<[string, string[], string, string]> = [
+  ["bana", ["banan", "egg"], "banan", "ren skrivefeil rettes"],
+  ["banan", ["banan"], "banan", "riktig fra før"],
+  ["epler", ["eple"], "epler", "flertall er ikke skrivefeil"],
+  ["eple", ["epler"], "eple", "samme andre veien"],
+  ["tomater", ["hakkede tomater"], "tomater", "kvalifikator, ikke skrivefeil"],
+  ["bana skiver", ["banan"], "bana skiver", "flerordet — bytte ville mistet «skiver»"],
+  ["fløte", ["egg"], "fløte", "ingen match å rette mot"],
+  ["mel", ["melk"], "mel", "ulike varer, skal ikke slås sammen"],
+];
+
+test("bruker brukerens stavemåte kun ved skrivefeil", () => {
+  for (const [item, userIngredients, expected, why] of STAVEMÅTE) {
+    assert.equal(
+      preferredSpelling(item, userIngredients),
+      expected,
       `«${item}» mot [${userIngredients.join(", ")}] — ${why}`
     );
   }

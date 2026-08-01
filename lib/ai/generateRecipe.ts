@@ -8,6 +8,7 @@ import {
 } from "@/lib/schema/generatedRecipe";
 import {
   normalizeIngredient,
+  preferredSpelling,
   userProvidedIngredient,
 } from "@/lib/utils/ingredientMatching";
 import type OpenAI from "openai";
@@ -36,6 +37,35 @@ const FORBIDDEN_UNIT_PATTERNS = [
   /\b(cups?|ounces?|oz|tablespoons?|tbsp|teaspoons?|tsp|pounds?|lbs?)\b/i,
   /\b\d+\s?g\b/i,
 ];
+
+/**
+ * Retter modellens stavefeil i ingredienslista mot brukerens egen skrivemåte.
+ *
+ * gemma4:e4b skriver jevnlig «bana» for «banan». Matchingen håndterer det
+ * allerede, så varen havner ikke feilaktig i handlelista — men den feilstavede
+ * teksten ble stående i oppskriften brukeren leser. Kun rene skrivefeil rettes;
+ * bøyningsformer får stå.
+ *
+ * Fremgangsmåten røres ikke. Der står ordet som regel riktig, og
+ * tekstutbytting i fritekst er en mye lettere måte å ødelegge en setning på.
+ */
+function applyUserSpelling(
+  recipe: GeneratedRecipe,
+  userIngredients: string[]
+): { recipe: GeneratedRecipe; correctedCount: number } {
+  let correctedCount = 0;
+
+  const ingredients = recipe.ingredients.map((ingredient) => {
+    const item = preferredSpelling(ingredient.item, userIngredients);
+    if (item !== ingredient.item) {
+      correctedCount++;
+      return { ...ingredient, item };
+    }
+    return ingredient;
+  });
+
+  return { recipe: { ...recipe, ingredients }, correctedCount };
+}
 
 function enforceMissingIngredientsConsistency(
   recipe: GeneratedRecipe,
@@ -340,7 +370,19 @@ export async function generateRecipeFromAI(
           };
         }
 
-        const consistencyChecked = enforceMissingIngredientsConsistency(parsedResult.recipe, input.ingredients);
+        const spellingFixed = applyUserSpelling(parsedResult.recipe, input.ingredients);
+        if (spellingFixed.correctedCount > 0) {
+          console.warn("[ai.generate.spelling_corrected]", {
+            requestId,
+            attempt,
+            correctedCount: spellingFixed.correctedCount,
+          });
+        }
+
+        const consistencyChecked = enforceMissingIngredientsConsistency(
+          spellingFixed.recipe,
+          input.ingredients
+        );
         if (consistencyChecked.autoAddedCount > 0) {
           console.warn("[ai.generate.missing_ingredients_auto_added]", {
             requestId,

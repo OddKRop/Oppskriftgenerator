@@ -4,6 +4,7 @@ import {
   maxTime,
   missingIngredientsConsistent,
   usesAtLeast,
+  usesUserSpelling,
   type Assertion,
   type ForbidOptions,
 } from "./assertions.ts";
@@ -75,7 +76,7 @@ export const cases: EvalCase[] = [
       allowLongerTime: false,
     },
     expect: "recipe",
-    assertions: [maxTime(40), usesAtLeast(3), missingIngredientsConsistent()],
+    assertions: [maxTime(40), usesAtLeast(3), missingIngredientsConsistent(), usesUserSpelling()],
   },
   {
     id: "få-ingredienser",
@@ -85,7 +86,7 @@ export const cases: EvalCase[] = [
       allowLongerTime: false,
     },
     expect: "recipe",
-    assertions: [maxTime(40), usesAtLeast(2), missingIngredientsConsistent()],
+    assertions: [maxTime(40), usesAtLeast(2), missingIngredientsConsistent(), usesUserSpelling()],
   },
   {
     id: "vegetar",
@@ -99,7 +100,7 @@ export const cases: EvalCase[] = [
     assertions: [
       forbidsWords("kjøtt/fisk i vegetaroppskrift", KJØTT_OG_FISK),
       maxTime(40),
-      missingIngredientsConsistent(),
+      missingIngredientsConsistent(), usesUserSpelling(),
     ],
   },
   {
@@ -113,7 +114,7 @@ export const cases: EvalCase[] = [
     expect: "recipe",
     assertions: [
       forbidsWords("meieri ved melkeallergi", MEIERI),
-      missingIngredientsConsistent(),
+      missingIngredientsConsistent(), usesUserSpelling(),
     ],
   },
   {
@@ -124,7 +125,7 @@ export const cases: EvalCase[] = [
       allowLongerTime: true,
     },
     expect: "recipe",
-    assertions: [usesAtLeast(3), missingIngredientsConsistent()],
+    assertions: [usesAtLeast(3), missingIngredientsConsistent(), usesUserSpelling()],
   },
   {
     id: "vagt-input",
@@ -134,6 +135,6 @@ export const cases: EvalCase[] = [
       allowLongerTime: false,
     },
     expect: "either",
-    assertions: [missingIngredientsConsistent()],
+    assertions: [missingIngredientsConsistent(), usesUserSpelling()],
   },
 ];

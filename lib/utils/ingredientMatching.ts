@@ -114,24 +114,73 @@ function isTypoOf(a: string, b: string): boolean {
   return Math.max(a.length, b.length) >= MIN_FUZZY_LENGTH && withinDistance(a, b, 1);
 }
 
-/** Er `recipeItem` dekket av den ene ingrediensen `userItem`? */
-function coveredBy(recipeItem: string, userItem: string): boolean {
+/**
+ * Hvordan de to møttes.
+ *
+ * Skillet finnes fordi «typo» er den eneste varianten der modellens stavemåte
+ * er direkte feil. «tokens» dekker legitime forskjeller — flertall, bestemt
+ * form, kvalifikatorer — og der er modellens ord like riktig som brukerens.
+ */
+export type MatchKind = "exact" | "tokens" | "typo" | "none";
+
+function matchOne(recipeItem: string, userItem: string): MatchKind {
   const recipeTokens = tokenize(recipeItem);
   const userTokens = tokenize(userItem);
 
   if (recipeTokens.length === 0 || userTokens.length === 0) {
-    return false;
+    return "none";
+  }
+
+  if (normalizeIngredient(recipeItem) === normalizeIngredient(userItem)) {
+    return "exact";
   }
 
   if (recipeTokens.join(" ") === userTokens.join(" ")) {
-    return true;
+    return "tokens";
   }
 
   // Hvert ledd i oppskriftens ingrediens må gjenfinnes hos brukeren. Motsatt
   // vei gjelder ikke: brukerens «tomater» dekker ikke «tomatpuré».
-  return recipeTokens.every((token) =>
-    userTokens.some((candidate) => candidate === token || isTypoOf(candidate, token))
-  );
+  let viaTypo = false;
+
+  for (const token of recipeTokens) {
+    if (userTokens.includes(token)) {
+      continue;
+    }
+
+    if (userTokens.some((candidate) => isTypoOf(candidate, token))) {
+      viaTypo = true;
+      continue;
+    }
+
+    return "none";
+  }
+
+  return viaTypo ? "typo" : "tokens";
+}
+
+const MATCH_RANK: Record<MatchKind, number> = { exact: 3, tokens: 2, typo: 1, none: 0 };
+
+export type IngredientMatch = { kind: MatchKind; userItem?: string };
+
+/** Finner den av brukerens ingredienser som dekker `recipeItem` best. */
+export function matchUserIngredient(
+  recipeItem: string,
+  userIngredients: string[]
+): IngredientMatch {
+  let best: IngredientMatch = { kind: "none" };
+
+  for (const userItem of userIngredients) {
+    const kind = matchOne(recipeItem, userItem);
+    if (MATCH_RANK[kind] > MATCH_RANK[best.kind]) {
+      best = { kind, userItem };
+      if (kind === "exact") {
+        break;
+      }
+    }
+  }
+
+  return best;
 }
 
 /** Har brukeren oppgitt denne ingrediensen? */
@@ -139,5 +188,53 @@ export function userProvidedIngredient(
   recipeItem: string,
   userIngredients: string[]
 ): boolean {
-  return userIngredients.some((userItem) => coveredBy(recipeItem, userItem));
+  return matchUserIngredient(recipeItem, userIngredients).kind !== "none";
+}
+
+/**
+ * Modellens stavemåte, eller brukerens hvis modellen skrev feil.
+ *
+ * Kun ved rene skrivefeil på ett enkelt ord. Er ingrediensen flerordet, kan et
+ * bytte av hele teksten miste informasjon («bana skiver» → «banan»), og ved
+ * bøyningsforskjeller er modellens ord like riktig som brukerens — «epler» skal
+ * ikke bli «eple» bare fordi brukeren skrev entall.
+ */
+export function preferredSpelling(recipeItem: string, userIngredients: string[]): string {
+  const match = matchUserIngredient(recipeItem, userIngredients);
+
+  if (match.kind !== "typo" || !match.userItem) {
+    return recipeItem;
+  }
+
+  if (tokenize(recipeItem).length !== 1 || tokenize(match.userItem).length !== 1) {
+    return recipeItem;
+  }
+
+  const recipeWord = normalizeIngredient(recipeItem);
+  const userWord = normalizeIngredient(match.userItem);
+
+  if (looksLikeInflection(recipeWord, userWord)) {
+    return recipeItem;
+  }
+
+  return userWord;
+}
+
+// Endelser som gjør et ord til en bøyningsform av det andre.
+const INFLECTION_ENDINGS = ["r", "er", "e", "en", "et", "a", "ne", "ene", "ane"];
+
+/**
+ * Skiller bøyning fra skrivefeil når stemmeren ikke rakk det.
+ *
+ * «eple» og «epler» skiller seg med ett tegn, akkurat som «bana» og «banan»,
+ * så avstanden alene sier ingenting. Forskjellen er hva som er lagt til:
+ * «epler» = «eple» + r, en gyldig flertallsendelse, mens «banan» = «bana» + n
+ * ikke er noen bøyning — da er det kortere ordet en skrivefeil.
+ */
+function looksLikeInflection(a: string, b: string): boolean {
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+
+  return (
+    longer.startsWith(shorter) && INFLECTION_ENDINGS.includes(longer.slice(shorter.length))
+  );
 }
