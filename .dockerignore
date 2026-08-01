@@ -5,3 +5,4 @@ node_modules
 npm-debug.log*
 # Eval-harnessen kjøres på verten mot Ollama, aldri i imaget.
 evals
+**/*.test.ts

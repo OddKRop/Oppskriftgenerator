@@ -7,6 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/**/*.test.ts\"",
     "eval": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./evals/register.mjs evals/run.ts"
   },
   "dependencies": {

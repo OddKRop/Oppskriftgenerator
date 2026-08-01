@@ -6,6 +6,10 @@ import {
   type GeneratedRecipe,
   type GeneratedRecipeResult,
 } from "@/lib/schema/generatedRecipe";
+import {
+  normalizeIngredient,
+  userProvidedIngredient,
+} from "@/lib/utils/ingredientMatching";
 import type OpenAI from "openai";
 
 type GenerateRecipeResult =
@@ -33,15 +37,10 @@ const FORBIDDEN_UNIT_PATTERNS = [
   /\b\d+\s?g\b/i,
 ];
 
-function normalizeIngredient(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 function enforceMissingIngredientsConsistency(
   recipe: GeneratedRecipe,
   userIngredients: string[]
 ): { recipe: GeneratedRecipe; autoAddedCount: number } {
-  const userSet = new Set(userIngredients.map((item) => normalizeIngredient(item)).filter(Boolean));
   const uniqueRecipeIngredients: Array<{ item: string; normalized: string }> = [];
   const seenRecipeIngredients = new Set<string>();
 
@@ -58,8 +57,11 @@ function enforceMissingIngredientsConsistency(
     });
   }
 
+  // Streng likhet ville felt varer brukeren faktisk har: modellen skriver
+  // «tomater» der brukeren skrev «hakkede tomater», og en skrivefeil som
+  // «bana» for «banan» endte som manglende vare i handlelista.
   const missingFromUser = uniqueRecipeIngredients.filter(
-    (ingredient) => !userSet.has(ingredient.normalized)
+    (ingredient) => !userProvidedIngredient(ingredient.item, userIngredients)
   );
 
   const missingByKey = new Map(

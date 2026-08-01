@@ -1,4 +1,5 @@
 import type { GeneratedRecipe } from "@/lib/schema/generatedRecipe";
+import { userProvidedIngredient } from "@/lib/utils/ingredientMatching";
 
 export type Outcome =
   | { kind: "recipe"; recipe: GeneratedRecipe; assumptions: string[] }
@@ -138,14 +139,19 @@ export function missingIngredientsConsistent(): Assertion {
       return null;
     }
 
-    const owned = new Set(context.ingredients.map(normalize));
+    // Samme matcher som produksjonskoden, ellers ville kravet slått ut på
+    // nettopp de tilfellene appen med vilje regner som dekket.
     const listedAsMissing = new Set(
       outcome.recipe.missingIngredients.map((ingredient) => normalize(ingredient.item))
     );
 
     const unaccounted = outcome.recipe.ingredients
-      .map((ingredient) => normalize(ingredient.item))
-      .filter((item) => !owned.has(item) && !listedAsMissing.has(item));
+      .map((ingredient) => ingredient.item)
+      .filter(
+        (item) =>
+          !userProvidedIngredient(item, context.ingredients) &&
+          !listedAsMissing.has(normalize(item))
+      );
 
     // Grensen på 5 i skjemaet kutter lista, så et overskytende avvik er
     // forventet oppførsel og ikke en feil.
