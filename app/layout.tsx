@@ -19,7 +19,10 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Oppskriftgenerator",
+    // Etiketten under ikonet på hjem-skjermen. iOS kutter etter rundt tolv
+    // tegn, så det fulle navnet ble «Oppskriftge…». Samme ord som manifestets
+    // short_name.
+    title: "Oppskrift",
   },
 };
 
