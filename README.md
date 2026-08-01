@@ -120,6 +120,29 @@ npm run eval    # runs fixed inputs against the model, see docs/evaluation.md
 
 The eval harness needs Ollama running and the model pulled.
 
+## Deploy
+
+```bash
+npm run deploy               # check, then rebuild the container
+npm run deploy -- --check    # run the checks without deploying
+npm run deploy -- --skip-eval
+```
+
+The script type-checks, runs the unit tests and runs the eval harness, and only
+rebuilds if all three pass. Afterwards it waits for the app to answer and
+requires `/api/ai/health` to be green before reporting success.
+
+The checks deliberately live here rather than in CI. The model runs on this
+machine, so a hosted runner would have to download it on every run — while a
+deploy already happens here, with Ollama available. The cost is that the gate
+only guards deploys made through this script; `docker compose up --build` still
+bypasses it.
+
+A failed eval blocks the deploy. The model is probabilistic, so an occasional
+flake can stop one — that is the intent, and `--skip-eval` is the way out when
+something needs to ship regardless. It says plainly in the output that model
+behaviour went unverified.
+
 ## Error Handling
 
 The system includes multiple layers of protection:
@@ -177,7 +200,8 @@ Planned improvements include:
 - Improved logging and observability
 - Retrieval-Augmented Generation (RAG) for recipe knowledge
 - Prompt versioning
-- Running the eval harness automatically rather than by hand
+- Closing the gap the deploy gate leaves: a direct `docker compose up --build`
+  still skips every check
 
 ---
 

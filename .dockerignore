@@ -3,6 +3,7 @@ node_modules
 .git
 .env*
 npm-debug.log*
-# Eval-harnessen kjøres på verten mot Ollama, aldri i imaget.
+# Eval-harnessen og deploy-skriptet kjøres på verten, aldri i imaget.
 evals
+scripts
 **/*.test.ts

@@ -103,6 +103,17 @@ Because the model is probabilistic, a single green run proves little. Use
 `--runs` to sample repeatedly; `--json` writes the full result for comparing two
 models or two prompt revisions.
 
+### When it runs
+
+`npm run deploy` runs the type check, the unit tests and this harness, and
+rebuilds the container only if all three pass. A harness nobody runs catches
+nothing, so the deploy is the point where it is worth blocking.
+
+It is not in CI, and that is deliberate: the model runs on the deploy machine,
+so a hosted runner would download it on every run. The limitation to be aware of
+is that the gate only covers deploys made through the script — a direct
+`docker compose up --build` still bypasses it.
+
 ### A caveat on content assertions
 
 `forbidsWords` is a tripwire over word lists, not a nutrition checker. Norwegian

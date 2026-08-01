@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/**/*.test.ts\"",
-    "eval": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./evals/register.mjs evals/run.ts"
+    "eval": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./evals/register.mjs evals/run.ts",
+    "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
     "next": "16.1.1",
