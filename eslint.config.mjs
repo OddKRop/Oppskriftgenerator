@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // next-pwa genererer disse inn i public/ under bygget. De er allerede
+    // gitignorert, men uten dette drukner lint i advarsler fra minifisert kode
+    // så snart noen har kjørt npm run build.
+    "public/sw.js",
+    "public/sw.js.map",
+    "public/workbox-*.js",
+    "public/workbox-*.js.map",
   ]),
 ]);
 
