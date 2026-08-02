@@ -18,17 +18,20 @@
   --faint: #75798c;
   --dim: #595d6c;
 
-  --accent: #9184d9;
-  --accent-1: #d2cefd;
-  --accent-2: #b5abfc;
-  --accent-dk: #5d5294;
-  --accent-bg: #2b2741;
+  /* Aksentfamilien er bygget rundt Catppuccin Mocha sin blå (#89b4fa).
+     Rekkefølgen på lyshet er accent < accent-2 < accent-1: den mørkeste bærer
+     kantlinjer og fokusring, de lysere bærer tekst. */
+  --accent: #89b4fa;
+  --accent-1: #c9dbfe;
+  --accent-2: #a5c6fc;
+  --accent-dk: #4f6f9e;
+  --accent-bg: #212a3f;
 
   /* Eneste store fargeflate i designet: hero-båndet på resultatskjermen. */
-  --section: #262a60;
-  --on-section: #f3f5fe;
-  --on-section-muted: #b5afe8;
-  --step-num: #423a6a;
+  --section: #223563;
+  --on-section: #f0f4fe;
+  --on-section-muted: #a8c2ee;
+  --step-num: #35476f;
 
   --danger: #f2a0a0;
   --danger-line: #7a3b3b;
