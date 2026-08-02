@@ -33,6 +33,12 @@
   --on-section-muted: #a8c2ee;
   --step-num: #35476f;
 
+  /* Glødet i hjørnet av hero-båndet. Har ingen @theme-mapping fordi det bare
+     brukes i en radial-gradient inline, ikke gjennom en Tailwind-klasse — men
+     det hører hjemme her: som hardkodet hex i page.tsx ble det stående lilla da
+     resten av paletten ble blå. */
+  --section-glow: #466298;
+
   --danger: #f2a0a0;
   --danger-line: #7a3b3b;
 }

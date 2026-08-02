@@ -343,7 +343,9 @@ export default function Home() {
                 <div
                   aria-hidden
                   className="pointer-events-none absolute -right-16 -top-[70px] h-[210px] w-[210px] rounded-full opacity-75"
-                  style={{ background: "radial-gradient(circle, #4c5397 0%, transparent 70%)" }}
+                  style={{
+                    background: "radial-gradient(circle, var(--section-glow) 0%, transparent 70%)",
+                  }}
                 />
                 <div className="relative">
                   <div className="flex items-start justify-between gap-3">
