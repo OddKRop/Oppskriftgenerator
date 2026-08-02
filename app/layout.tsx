@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
@@ -19,6 +19,16 @@ export const metadata: Metadata = {
     // short_name.
     title: "Oppskrift",
   },
+};
+
+// viewport-fit=cover er det som gjør at env(safe-area-inset-*) i det hele tatt
+// får en verdi. Uten den er innrykket 0px, og home-indikatoren på iPhone legger
+// seg oppå tabbaren. Bredde og skala settes eksplisitt fordi et eget
+// viewport-objekt erstatter Next sine standardverdier.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

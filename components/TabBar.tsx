@@ -16,8 +16,10 @@ type TabBarProps = {
   resultEnabled?: boolean;
 };
 
+// Trykkflaten er 56px høy — over Apples minimum på 44pt. Selve baren blir
+// høyere enn dette igjen, siden nav-en legger på safe-area-innrykket under.
 const BASE =
-  "flex-1 pt-3.5 pb-4 text-center text-xs font-medium transition-colors";
+  "flex-1 pt-5 pb-5 text-center text-xs font-medium transition-colors";
 
 function toneFor(isActive: boolean, isEnabled: boolean): string {
   if (!isEnabled) return "text-dim cursor-default";
